@@ -214,7 +214,22 @@ Qed.
 
 End TransExamples.
 
+Theorem final_exists: forall (f: CNF),
+  (state [] f ==>* fail /\ Final fail) \/
+  (exists (m: PA Ann), state [] f ==>* state m f /\ Final (state m f)).
+Admitted.
+
 Theorem final_sat_refl: forall (f: CNF) (m: PA Ann),
   state [] f ==>* state m f /\ Final (state m f) <-> Sat f.
+Admitted.
+
 Theorem final_unsat_refl: forall (f: CNF),
   state [] f ==>* fail /\ Final fail <-> Unsat f.
+Admitted.
+
+Theorem sat_decidable: forall (f: CNF), Sat f \/ Unsat f.
+Proof.
+  intros. destruct (final_exists f).
+  - right. apply final_unsat_refl. assumption.
+  - left. destruct H. apply (final_sat_refl f x). assumption.
+Qed.
