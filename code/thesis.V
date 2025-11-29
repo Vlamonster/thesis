@@ -223,6 +223,13 @@ Admitted.
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
 Admitted.
 
+(* Temporarily has `n` for testing, until termination in proven. *)
+Equations solve (n: nat) (s: State): State :=
+solve 0     _ := s;
+solve (S n) s with next_state s :=
+  | Some s' := solve n s'
+  | None := s.
+
 Theorem final_exists: forall (f: CNF),
   (state [] f ==>* fail /\ Final fail) \/
   (exists (m: PA Ann), state [] f ==>* state m f /\ Final (state m f)).
