@@ -49,11 +49,11 @@ l_ann ((l', a) :: m) l with l =? l', l =? neg l' :=
   | _   , true := Some a
   | _   , _    := l_ann m l.
 
-Equations l_remove (l: Lit) (c: Clause): Clause :=
-l_remove l [] := [];
-l_remove l (l' :: c) with l =? l' :=
+Equations l_remove (c: Clause) (l: Lit): Clause :=
+l_remove [] _  := [];
+l_remove (l' :: c) l  with l =? l' :=
   | true := c
-  | false := l' :: l_remove l c.
+  | false := l' :: l_remove c l.
 
 Equations c_eval {A: Type} (m: PA A) (c: Clause): option bool :=
 c_eval m [] := Some false;
@@ -126,7 +126,7 @@ Inductive Trans: relation State :=
 | t_unit (m: PA Ann) (f: CNF) (c: Clause) (l: Lit):
   In l c ->
   In c f ->
-  Conflicting m (l_remove l c) ->
+  Conflicting m (l_remove c l) ->
   Undef m l ->
   Trans (state m f) (state (m ++p l) f)
 (* Arbitrarily set an unassigned literal in the formula to true. *)
@@ -209,31 +209,45 @@ last_decision [] := None;
 last_decision (_ ++d l) := Some l;
 last_decision (m ++p _) := last_decision m.
 
-Equations find_conflict (m: PA Ann) (f: CNF): option Clause :=
-find_conflict m [] := None;
-find_conflict m (c :: f) with c_eval m c :=
-  | Some false => Some c
-  | _ => find_conflict m f.
+Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
+option_bind _ None     := None;
+option_bind f (Some a) := f a.
 
-Definition find_unit (m: PA Ann) (f: CNF): option (Clause * Lit).
-Admitted.
+Equations is_conflict (m: PA Ann) (c: Clause): bool :=
+is_conflict m c with c_eval m c :=
+  | Some false := true
+  | _          := false.
+
+Equations is_undefined_c (m: PA Ann) (c: Clause): bool :=
+is_undefined_c m c with c_eval m c := 
+  | None := true
+  | _    := false.
+
+Equations is_undefined_l (m: PA Ann) (l: Lit): bool :=
+is_undefined_l m l with l_eval m l := 
+  | None := true
+  | _    := false.
+
+Equations find_conflict (m: PA Ann) (f: CNF): option Clause :=
+find_conflict m f := find (is_conflict m) f.
+
+Equations find_unit_l (m: PA Ann) (c: Clause): option Lit :=
+find_unit_l m c := find (fun (l: Lit) => is_conflict m (l_remove c l)) c.
+
+Equations find_unit (m: PA Ann) (f: CNF): option (Clause * Lit) :=
+find_unit m [] := None;
+find_unit m (c :: f) with c_eval m c, find_unit_l m c :=
+  | None, Some l := Some (c, l)
+  | _   , _      := find_unit m f.
 
 Equations find_undef_c (m: PA Ann) (f: CNF): option Clause :=
-find_undef_c m [] := None;
-find_undef_c m (c :: f) with c_eval m c :=
-  | None := Some c
-  | _    := find_undef_c m f.
+find_undef_c m f := find (is_undefined_c m) f.
 
 Equations find_undef_l (m: PA Ann) (c: Clause): option Lit :=
-find_undef_l m [] := None;
-find_undef_l m (l :: c) with l_eval m l :=
-  | None := Some l
-  | _    := find_undef_l m c.
+find_undef_l m c := find (is_undefined_l m) c.
 
 Equations find_decision (m: PA Ann) (f: CNF): option Lit :=
-find_decision m f with find_undef_c m f :=
-  | Some c := find_undef_l m c
-  | _      := None.
+find_decision m f := option_bind (find_undef_l m) (find_undef_c m f).
 
 Equations next_state (s: State): option State :=
 next_state fail := None;
