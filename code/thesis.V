@@ -221,8 +221,22 @@ find_conflict m (c :: f) with c_eval m c :=
 Definition find_unit (m: PA Ann) (f: CNF): option (Clause * Lit).
 Admitted.
 
-Definition find_decision (m: PA Ann) (f: CNF): option Lit.
-Admitted.
+Equations find_undef_c (m: PA Ann) (f: CNF): option Clause :=
+find_undef_c m [] := None;
+find_undef_c m (c :: f) with c_eval m c :=
+  | None := Some c
+  | _    := find_undef_c m f.
+
+Equations find_undef_l (m: PA Ann) (c: Clause): option Lit :=
+find_undef_l m [] := None;
+find_undef_l m (l :: c) with l_eval m l :=
+  | None := Some l
+  | _    := find_undef_l m c.
+
+Equations find_decision (m: PA Ann) (f: CNF): option Lit :=
+find_decision m f with find_undef_c m f :=
+  | Some c := find_undef_l m c
+  | _      := None.
 
 Equations next_state (s: State): option State :=
 next_state fail := None;
