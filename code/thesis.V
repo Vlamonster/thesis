@@ -149,9 +149,6 @@ Infix "==>*" := TransRTC (at level 70).
 
 Definition Final (s: State): Prop := ~ exists (s': State), s ==> s'.
 
-Theorem fail_final: Final fail.
-Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
-
 Module TransExamples.
 
 Example dead_end:
@@ -257,7 +254,11 @@ next_state (state m f) :=
   None
   end end end.
 
-Lemma next_state_trans_refl: forall (s s': State), next_state s = Some s' <-> s ==> s'.
+Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
+Admitted.
+
+(* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
+Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
 Admitted.
 
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
@@ -269,6 +270,9 @@ solve 0     _ := s;
 solve (S n) s with next_state s :=
   | Some s' := solve n s'
   | None := s.
+
+Theorem fail_final: Final fail.
+Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
 
 Theorem final_exists: forall (f: CNF),
   (state [] f ==>* fail /\ Final fail) \/
