@@ -286,6 +286,50 @@ Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
 
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
+Proof.
+  intros. funelim (next_state s).
+  - simp next_state in H. discriminate.
+  - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
+    + destruct (last_decision m) as [l_last|] eqn:last_decision.
+      * destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
+        (* t_unit *)
+        -- rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+           apply (t_unit m f c_unit l_unit).
+            ++ admit.
+            ++ admit.
+            ++ admit.
+            ++ admit.
+        -- destruct (find_decision m f) as [l_decision|] eqn:find_decision.
+            (* t_decide *)
+            ++ rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+               (* apply (t_decide m f _ l_decision). missing c_decision*)
+               admit.
+            ++ destruct (split_last_decision m) as [((m_split, l_split), n_split)|] eqn:split_last_decision.
+              (* t_backtrack *)
+              ** rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+                 (* apply (t_backtrack m_split n_split f c_conflict l_split).*)
+                 admit.
+              (* last_decision and split_last_decision contradict *)
+              ** admit.
+      (* t_fail *)
+      * rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+        apply (t_fail m f c_conflict).
+          -- admit.
+          -- admit.
+          -- admit.
+    + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
+      (* t_unit *)
+      * rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+        apply (t_unit m f c_unit l_unit).
+          -- admit.
+          -- admit.
+          -- admit.
+          -- admit.
+      * destruct (find_decision m f) as [l_decision|] eqn:find_decision.
+          -- rewrite H in Heqcall. injection Heqcall as Heqcall. rewrite <- Heqcall.
+             admit.
+             (* apply (t_decide m f _ l_decision). *)
+          -- rewrite H in Heqcall. discriminate.
 Admitted.
 
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
