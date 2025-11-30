@@ -296,6 +296,14 @@ Admitted.
 Lemma fail_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
 Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
 
+Lemma fail_conflict: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
+Proof. 
+  unfold Conflicting. intros. simp find_conflict in H. apply find_some in H as [_ H]. funelim (is_conflict m c).
+  - congruence.
+  - assumption.
+  - congruence.
+Qed.
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -312,7 +320,7 @@ Proof.
       (* t_fail *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
         -- apply (fail_c_in_f m f c_conflict). assumption.
-        -- admit.
+        -- apply (fail_conflict m f c_conflict). assumption.
         -- admit.
     + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
       (* t_unit *)
