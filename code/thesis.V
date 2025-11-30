@@ -284,6 +284,15 @@ Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
 Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
 
+Lemma split_decomp: forall (m m' n': PA Ann) (l': Lit),
+  split_last_decision m = Some (m', l', n') -> m = m' ++d l' ++a n'.
+Proof.
+  intros. simp split_last_decision in H. funelim (split_last_decision_aux m []).
+  - discriminate.
+  - simp split_last_decision_aux in H. simpl in H. injection H as H. subst. reflexivity.
+  - admit.
+Admitted. 
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -291,7 +300,13 @@ Proof.
   - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
     + destruct (split_last_decision m) as [((m_split, l_split), n_split)|] eqn:split_last_decision.
       (* t_backtrack *)
-      * injection Heqcall as Heqcall. rewrite Heqcall. (* apply (t_backtrack m_split n_split f c_conflict l_split).*)
+      * injection Heqcall as Heqcall. rewrite Heqcall. 
+        pose proof (split_decomp _ _ _ _ split_last_decision) as decomp. rewrite decomp.
+        apply (t_backtrack m_split n_split f c_conflict l_split).
+        -- admit.
+        -- admit.
+        -- admit.
+      (* apply (t_backtrack m_split n_split f c_conflict l_split).*)
         admit.
       (* t_fail *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
