@@ -331,12 +331,20 @@ Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
 
 Lemma split_decomp: forall (m m': PA Ann) (l': Lit),
-  split_last_decision m = Some (m', l') -> exists (n': PA Ann), m = m' ++d l' ++a n'.
+  split_last_decision m = Some (m', l') -> exists (n': PA Ann), m = m' ++d l' ++a n' /\ NoDecisions n'.
 Proof.
-  intros. funelim (split_last_decision m).
+  unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
   - discriminate.
-  - rewrite <- Heqcall in H. injection H as H. subst. exists []. reflexivity.
-  - rewrite <- Heqcall in H0. destruct (H m' l' H0). rewrite H1. exists (x ++p l). reflexivity.
+  - rewrite <- Heqcall in H. injection H as H. subst. exists []. split.
+    + reflexivity.
+    + intros. destruct H. discriminate.
+  - rewrite <- Heqcall in H0. destruct (H m' l' H0). destruct H1. rewrite H1. exists (x ++p l). split.
+    + reflexivity.
+    + intros. apply H2. destruct H3. exists x0. simp l_ann in H3. destruct (x0 =? neg l), (x0 =? l).
+      * simpl in H3. discriminate.
+      * simpl in H3. discriminate.
+      * simpl in H3. discriminate.
+      * simpl in H3. assumption.
 Qed. 
 
 Lemma find_conflict_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
@@ -478,11 +486,11 @@ Proof.
       (* t_backtrack *)
       * injection Heqcall as Heqcall. rewrite Heqcall. 
         pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
-        destruct decomp as [n_split decomp]. rewrite decomp.
+        destruct decomp as [n_split [decomp no_dec]]. rewrite decomp.
         apply (t_backtrack m_split n_split f c_conflict l_split).
         -- apply (find_conflict_c_in_f m f c_conflict). assumption.
         -- rewrite <- decomp. apply (find_conflict_conflicting m f c_conflict). assumption.
-        -- admit.
+        -- assumption.
       (* t_fail *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
         -- apply (find_conflict_c_in_f m f c_conflict). assumption.
