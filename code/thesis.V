@@ -429,6 +429,21 @@ Proof.
   - right. apply (H c0 l). congruence.
 Qed.
 
+Lemma find_unit_conflicting: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> Conflicting m (l_remove c l).
+Proof.
+  unfold Conflicting. intros. funelim (find_unit m f).
+  - discriminate.
+  - apply H. congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst.
+    funelim (find_unit_l m c0). rewrite Heq in Heqcall. apply find_some in Heqcall.
+    destruct Heqcall. funelim (is_conflict m (l_remove c l0)).
+    + congruence.
+    + assumption.
+    + congruence.
+  - apply H. congruence.
+Qed.
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -453,7 +468,7 @@ Proof.
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
         -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
         -- apply (find_unit_c_in_f m f c_unit l_unit). assumption.
-        -- admit.
+        -- apply (find_unit_conflicting m f c_unit l_unit). assumption.
         -- admit.
       * destruct (find_decision m f) as [l_decision|] eqn:find_decision.
         (* t_decide *)
