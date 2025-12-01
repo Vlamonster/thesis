@@ -442,6 +442,25 @@ Proof.
   - apply H. congruence.
 Qed.
 
+Lemma undef_remove_false__undef: forall (m: PA Ann) (c: Clause) (l: Lit),
+  c_eval m c = None -> c_eval m (l_remove c l) = Some false -> Undef m l.
+Proof. Admitted.
+
+Lemma find_unit_undef: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> Undef m l.
+Proof.
+  unfold Undef. intros. funelim (find_unit m f).
+  - discriminate.
+  - apply (H c0 l0). congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. funelim (find_unit_l m c0).
+    rewrite Heq in Heqcall. apply find_some in Heqcall. destruct Heqcall.
+    funelim (is_conflict m (l_remove c l0)).
+    + congruence.
+    + apply (undef_remove_false__undef m c0 l0); assumption.
+    + congruence.
+  - apply (H c0 l). congruence.
+Qed.
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -467,7 +486,7 @@ Proof.
         -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
         -- apply (find_unit_c_in_f m f c_unit l_unit). assumption.
         -- apply (find_unit_conflicting m f c_unit l_unit). assumption.
-        -- admit.
+        -- apply (find_unit_undef m f c_unit l_unit). assumption.
       * destruct (find_decision m f) as [l_decision|] eqn:find_decision.
         (* t_decide *)
         -- injection Heqcall as Heqcall. rewrite Heqcall. autorewrite with find_decision in find_decision.
