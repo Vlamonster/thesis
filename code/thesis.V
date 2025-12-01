@@ -419,6 +419,16 @@ Proof.
   - apply H. congruence.
 Qed.
 
+Lemma find_unit_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> In c f.
+Proof. 
+  intros. funelim (find_unit m f).
+  - congruence.
+  - right. apply (H c0 l0). congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. left. reflexivity.
+  - right. apply (H c0 l). congruence.
+Qed.
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -442,7 +452,7 @@ Proof.
       (* t_unit *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
         -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
-        -- admit.
+        -- apply (find_unit_c_in_f m f c_unit l_unit). assumption.
         -- admit.
         -- admit.
       * destruct (find_decision m f) as [l_decision|] eqn:find_decision.
