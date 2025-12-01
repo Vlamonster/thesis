@@ -401,6 +401,24 @@ Proof.
   - assumption.
 Qed.
 
+Lemma find_unit_l_l_in_c: forall (m: PA Ann) (c: Clause) (l: Lit),
+  find_unit_l m c = Some l -> In l c.
+Proof.
+  intros. funelim (find_unit_l m c). rewrite H in Heqcall. 
+  apply find_some in Heqcall. destruct Heqcall. assumption.
+Qed.
+
+Lemma find_unit_l_in_c: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> In l c.
+Proof. 
+  intros. funelim (find_unit m f).
+  - congruence.
+  - apply H. rewrite <- H0. assumption.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. 
+    apply (find_unit_l_l_in_c m c0 l0). assumption.
+  - apply H. congruence.
+Qed.
+
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
   intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
@@ -423,7 +441,7 @@ Proof.
     + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
       (* t_unit *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
-        -- admit.
+        -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
         -- admit.
         -- admit.
         -- admit.
