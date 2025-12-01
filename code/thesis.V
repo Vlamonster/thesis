@@ -462,9 +462,12 @@ Proof.
   - apply (H c0 l). congruence.
 Qed.
 
-Lemma split_tail_undef: forall (m n: PA Ann) (l: Lit),
-  split_last_decision (m ++d l ++a n) = Some (m, l) -> NoDecisions n.
-Proof. Admitted.
+Lemma app_cancel: forall (m n: PA Ann), m ++a n = m -> n = [].
+Proof.
+  induction m.
+  - intros. rewrite app_nil_r in H. assumption.
+  - intros. apply IHm. apply (app_inv_tail (a::m) _ []) in H. rewrite H. simpl. reflexivity.
+Qed.
 
 Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
 Proof.
