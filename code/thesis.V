@@ -130,6 +130,7 @@ Compute l_eval [(Pos 1, tt)] (Neg 1).
 Compute c_eval [] [Pos 1; Pos 2].
 Compute c_eval [(Pos 1, tt)] [Pos 1; Pos 2].
 Compute c_eval [(Neg 1, tt)] [Pos 1; Pos 2].
+Compute c_eval [(Pos 2, tt)] [Pos 1; Pos 2].
 End EvalExamples.
 
 Definition Def {A: Type} (m: PA A) (l: Lit): Prop := exists (v: bool), l_eval m l = Some v.
@@ -338,10 +339,10 @@ Proof.
   - rewrite <- Heqcall in H0. destruct (H m' l' H0). rewrite H1. exists (x ++p l). reflexivity.
 Qed. 
 
-Lemma fail_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
+Lemma find_conflict_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
 Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
 
-Lemma fail_conflict: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
+Lemma find_conflict_conflicting: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
 Proof. 
   unfold Conflicting. intros. simp find_conflict in H. apply find_some in H as [_ H]. funelim (is_conflict m c).
   - congruence.
@@ -472,13 +473,13 @@ Proof.
         pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
         destruct decomp as [n_split decomp]. rewrite decomp.
         apply (t_backtrack m_split n_split f c_conflict l_split).
-        -- admit.
-        -- admit.
+        -- apply (find_conflict_c_in_f m f c_conflict). assumption.
+        -- rewrite <- decomp. apply (find_conflict_conflicting m f c_conflict). assumption.
         -- admit.
       (* t_fail *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
-        -- apply (fail_c_in_f m f c_conflict). assumption.
-        -- apply (fail_conflict m f c_conflict). assumption.
+        -- apply (find_conflict_c_in_f m f c_conflict). assumption.
+        -- apply (find_conflict_conflicting m f c_conflict). assumption.
         -- apply (no_split__no_decision m). assumption.
     + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
       (* t_unit *)
