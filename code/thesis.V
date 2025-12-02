@@ -564,12 +564,23 @@ Proof.
         -- discriminate.
 Qed.
 
+Lemma find_conflict_exists: forall (m: PA Ann) (f: CNF) (c: Clause),
+  In c f -> Conflicting m c -> exists (c': Clause), find_conflict m f = Some c'.
+Proof. Admitted.
+
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
 Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
 Proof.
   intros. inversion H.
   (* t_fail *)
-  - admit.
+  - exists fail. funelim (next_state (state m f)).
+    + discriminate.
+    + injection eqargs as eqargs. symmetry in eqargs, H3. subst. 
+      destruct (find_conflict m f) eqn:G1.
+      * destruct (split_last_decision m) eqn:G2.
+        -- destruct p as [m_split l_split]. admit.
+        -- reflexivity.
+      * destruct (find_conflict_exists m f c H0 H1). congruence.
   (* t_unit *)
   - admit.
   (* t_decide *)
