@@ -592,9 +592,31 @@ Proof.
           ++ now exists (state (m ++d l_decide) f).
           ++ admit. (* Hfind_dec contradicts Hundef /\ Hl_in_c /\ Hc_in_f *)
   (* t_decide *)
-  - admit.
+  - funelim (next_state (state m f)).
+    + discriminate.
+    + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+        -- now exists (state (m_split ++p neg l_split) f).
+        -- now exists fail.
+      * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m ++p l_unit') f).
+        -- destruct (find_decision m f) as [l_decide'|] eqn:Hfind_dec.
+          ++ now exists (state (m ++d l_decide') f).
+          ++ admit. (* Hfind_dec contradicts Hundef /\ Hx_in_c /\ Hc_in_f *)
   (* t_backtrack *)
-  - admit.
+  - funelim (next_state (state (m_split ++d l_split ++a n_split) f)).
+    + discriminate.
+    + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
+      destruct (find_conflict (m_split ++d l_split ++a n_split) f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (split_last_decision (m_split ++d l_split ++a n_split)) as [(m_split', l_split')|] eqn:Hsplit.
+        -- now exists (state (m_split' ++p neg l_split') f).
+        -- now exists fail.
+      * destruct (find_unit (m_split ++d l_split ++a n_split) f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m_split ++d l_split ++a n_split ++p l_unit') f).
+        -- destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide'|] eqn:Hfind_dec.
+          ++ now exists (state (m_split ++d l_split ++a n_split ++d l_decide') f).
+          ++ destruct (find_conflict_exists (m_split ++d l_split ++a n_split) f c_conflict Hc_in_f Hconflict). congruence.
 Admitted.
 
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
