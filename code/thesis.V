@@ -29,40 +29,20 @@ eqb_lit _ _ => false.
 Notation "l1 =? l2" := (eqb_lit l1 l2) (at level 70).
 
 Lemma eqb_lit_refl: forall (l: Lit), l =? l = true.
-Proof. intros. destruct l; simp eqb_lit; apply eqb_atom_refl. Qed.
+Proof. destruct l; simp eqb_lit; apply eqb_atom_refl. Qed.
 
 Lemma eqb_lit_sym: forall (l1 l2: Lit), (l1 =? l2) = (l2 =? l1).
-Proof. 
-  intros. destruct l1, l2; simp eqb_lit.
-  - apply eqb_atom_sym.
-  - reflexivity.
-  - reflexivity.
-  - apply eqb_atom_sym.
-Qed.
+Proof. destruct l1, l2; simp eqb_lit; try reflexivity; try (apply eqb_atom_sym; reflexivity). Qed.
 
 Lemma eqb_lit_eq: forall (l1 l2: Lit), l1 =? l2 = true <-> l1 = l2.
-Proof.
-  destruct l1, l2.
-  - split.
-    + intros. simp eqb_lit in H. apply eqb_atom_eq in H. subst. reflexivity.
-    + intros. rewrite H. apply eqb_lit_refl.
-  - split.
-    + intros. simp eqb_lit in H. discriminate.
-    + intros. discriminate.
-  - split.
-    + intros. simp eqb_lit in H. discriminate.
-    + intros. discriminate.
-  - split.
-    + intros. simp eqb_lit in H. apply eqb_atom_eq in H. subst. reflexivity.
-    + intros. injection H as H. subst. apply eqb_lit_refl.
-Qed.
+Proof. destruct l1, l2; split; try simp eqb_lit; try rewrite eqb_atom_eq; try congruence. Qed.
 
 Lemma eqb_lit_neq: forall (l1 l2: Lit), l1 =? l2 = false <-> l1 <> l2.
 Proof.
-  intros l1 l2. split.
-  - intros Hneq Heq. rewrite Heq in Hneq. rewrite eqb_lit_refl in Hneq. discriminate.
-  - intros Hneq. destruct (l1 =? l2) eqn:Heq.
-    + apply eqb_lit_eq in Heq. exfalso. apply Hneq. apply Heq.
+  split.
+  - intros Hneqb Heq. subst. rewrite eqb_lit_refl in Hneqb. discriminate.
+  - intros Hneq. destruct (l1 =? l2) eqn:Heqb.
+    + apply eqb_lit_eq in Heqb. exfalso. apply Hneq. apply Heqb.
     + reflexivity.
 Qed.
 
@@ -77,8 +57,11 @@ neg (Pos p) := Neg p;
 neg (Neg p) := Pos p.
 
 Lemma neg_neq: forall (l: Lit), l <> neg l.
-Proof. 
-  intros. apply eqb_lit_neq. funelim (eqb_lit l (neg l)).
+Proof.
+  intros. apply eqb_lit_neq. destruct (l =? neg l) eqn:G.
+  - apply eqb_lit_eq in G. 
+  
+  funelim (eqb_lit l (neg l)).
   - rewrite Heqcall. simp neg eqb_lit. reflexivity.
   - reflexivity.
   - reflexivity.
