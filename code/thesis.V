@@ -42,7 +42,7 @@ Proof.
   split.
   - intros Hneqb Heq. subst. rewrite eqb_lit_refl in Hneqb. discriminate.
   - intros Hneq. destruct (l1 =? l2) eqn:Heqb.
-    + apply eqb_lit_eq in Heqb. exfalso. apply Hneq. apply Heqb.
+    + apply eqb_lit_eq in Heqb. congruence.
     + reflexivity.
 Qed.
 
