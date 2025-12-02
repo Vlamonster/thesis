@@ -558,7 +558,7 @@ Proof.
       * destruct (find_decision m f) as [l_decide|] eqn:find_decision.
         (* t_decide *)
         -- injection Heqcall as Heqcall. rewrite Heqcall.
-           destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Haa Hc_in_f]].
+           destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
            apply (t_decide m f c_decide l_decide).
           ++ left. apply (find_undef_l_in_c m c_decide l_decide). assumption.
           ++ assumption.
