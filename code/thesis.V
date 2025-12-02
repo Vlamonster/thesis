@@ -570,16 +570,27 @@ Proof.
       m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
     ]; subst s s'.
   (* t_fail *)
-  - exists fail. funelim (next_state (state m f)).
+  - funelim (next_state (state m f)).
     + discriminate.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst. 
-      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
       * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
-        -- apply no_decision__no_split in Hno_dec. congruence.
-        -- reflexivity.
+        -- now exists (state (m_split ++p neg l_split) f).
+        -- now exists fail.
       * destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
   (* t_unit *)
-  - admit.
+  - funelim (next_state (state m f)).
+    + discriminate.
+    + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+        -- now exists (state (m_split ++p neg l_split) f).
+        -- now exists fail.
+      * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m ++p l_unit') f).
+        -- destruct (find_decision m f) as [l_decide|] eqn:Hfind_dec.
+          ++ now exists (state (m ++d l_decide) f).
+          ++ admit. (* Hfind_dec contradicts Hundef /\ Hl_in_c /\ Hc_in_f *)
   (* t_decide *)
   - admit.
   (* t_backtrack *)
