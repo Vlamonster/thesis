@@ -570,7 +570,13 @@ Qed.
 
 Lemma find_decision_exists: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
   In l c -> In c f -> Undef m l -> exists (l': Lit), find_decision m f = Some l'.
-Proof. Admitted.
+Proof.
+  unfold Undef. intros. autorewrite with find_decision. destruct (find_undef_c m f) eqn:G.
+  - destruct (find_undef_l m c0) eqn:G2.
+    + now exists l0.
+    + autorewrite with option_bind. apply find_undef_c_undef in G. destruct G. congruence.
+  - admit.
+Admitted.
 
 Lemma undef__neg_undef: forall (m: PA Ann) (l: Lit), Undef m l <-> Undef m (neg l).
 Proof.
@@ -585,11 +591,12 @@ Proof.
     + apply eqb_lit_eq in Heq. subst. simp neg in H. rewrite neg_involutive in H.
       simp l_eval in H. rewrite eqb_lit_refl in H. rewrite neg_neqb in H. discriminate.
   - intuition.
-    + simp l_eval. rewrite <- eqb_lit_neg_compat. rewrite Heq0.
-      assert (neg l =? l' = false). admit. rewrite H1.  simpl. assumption.
+    + simp l_eval. rewrite <- eqb_lit_neg_compat. rewrite Heq0. rewrite eqb_lit_neg_compat in Heq.
+      rewrite neg_involutive in Heq. rewrite Heq. simpl. assumption.
     + autorewrite with l_eval in H. rewrite <- eqb_lit_neg_compat in H. rewrite Heq0 in H.
-      assert (neg l =? l' = false). admit. rewrite H2 in H. simpl in H. apply H1. apply H.
-Admitted.
+      rewrite eqb_lit_neg_compat in Heq. rewrite neg_involutive in Heq. rewrite Heq in H. simpl in H. 
+      apply H1. apply H.
+Qed.
 
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
 Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
@@ -637,7 +644,8 @@ Proof.
           ++ now exists (state (m ++d l_decide') f).
           ++ destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
             ** destruct (find_decision_exists m f c_decide l_decide Hl_in_c Hc_in_f Hundef). congruence.
-            ** admit.
+            ** apply undef__neg_undef in Hundef.
+               destruct (find_decision_exists m f c_decide (neg l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
   (* t_backtrack *)
   - funelim (next_state (state (m_split ++d l_split ++a n_split) f)).
     + discriminate.
@@ -651,7 +659,7 @@ Proof.
         -- destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide'|] eqn:Hfind_dec.
           ++ now exists (state (m_split ++d l_split ++a n_split ++d l_decide') f).
           ++ destruct (find_conflict_exists (m_split ++d l_split ++a n_split) f c_conflict Hc_in_f Hconflict). congruence.
-Admitted.
+Qed.
 
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
 Admitted.
