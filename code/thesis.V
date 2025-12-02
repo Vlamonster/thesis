@@ -32,7 +32,7 @@ Lemma eqb_lit_refl: forall (l: Lit), l =? l = true.
 Proof. destruct l; simp eqb_lit; apply eqb_atom_refl. Qed.
 
 Lemma eqb_lit_sym: forall (l1 l2: Lit), (l1 =? l2) = (l2 =? l1).
-Proof. destruct l1, l2; simp eqb_lit; try reflexivity; try (apply eqb_atom_sym; reflexivity). Qed.
+Proof. destruct l1, l2; simp eqb_lit; try reflexivity; try now apply eqb_atom_sym. Qed.
 
 Lemma eqb_lit_eq: forall (l1 l2: Lit), l1 =? l2 = true <-> l1 = l2.
 Proof. destruct l1, l2; split; try simp eqb_lit; try rewrite eqb_atom_eq; try congruence. Qed.
