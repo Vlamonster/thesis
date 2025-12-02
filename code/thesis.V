@@ -540,7 +540,12 @@ Qed.
 
 Lemma find_conflict_exists: forall (m: PA Ann) (f: CNF) (c: Clause),
   In c f -> Conflicting m c -> exists (c': Clause), find_conflict m f = Some c'.
-Proof. Admitted.
+Proof.
+  unfold Conflicting. intros m f c Hin Hc. destruct (find_conflict m f) as [c'|] eqn:Hfind.
+  - now exists c'.
+  - simp find_conflict in Hfind. pose proof (find_none (is_conflict m) f Hfind c Hin) as contra.
+    simp is_conflict in contra. rewrite Hc in contra. simpl in contra. discriminate.
+Qed.
 
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
 Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
