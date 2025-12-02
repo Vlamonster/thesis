@@ -353,14 +353,26 @@ Proof.
   - discriminate.
   - destruct H1. apply (H m).
     + assumption.
-    + exists x. destruct (x =? l) eqn:G1, (x =? neg l) eqn:G2.
+    + destruct (x =? l) eqn:G1, (x =? neg l) eqn:G2.
       * apply eqb_lit_eq in G1. subst. rewrite l_ann_prop_eq in H1. discriminate.
       * apply eqb_lit_eq in G1. subst. rewrite l_ann_prop_eq in H1. discriminate.
       * apply eqb_lit_eq in G2. subst. rewrite l_ann_prop_eq_neg in H1. discriminate.
-      * rewrite eqb_lit_neq in G1, G2. rewrite <- (l_ann_prop_neq m _ _ (conj G1 G2)). assumption.
+      * exists x. rewrite eqb_lit_neq in G1, G2. rewrite <- (l_ann_prop_neq m _ _ (conj G1 G2)). assumption.
     + reflexivity.
     + reflexivity.
 Qed.
+
+Lemma no_decision__no_split: forall (m: PA Ann), NoDecisions m -> split_last_decision m = None.
+Proof. 
+  unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
+  - reflexivity.
+  - exfalso. apply H. exists l. simp l_ann. rewrite eqb_lit_refl. reflexivity.
+  - apply H. intros. destruct H1. destruct (x =? l) eqn:G1, (x =? neg l) eqn:G2.
+    + admit.
+    + admit.
+    + admit.
+    + apply H0. exists x. simp l_ann. rewrite G1, G2. simpl. assumption.
+Admitted.
 
 Lemma find_undef_l_in_c: forall (m: PA Ann) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
@@ -563,7 +575,7 @@ Proof.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst. 
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind.
       * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
-        -- admit.
+        -- apply no_decision__no_split in Hno_dec. congruence.
         -- reflexivity.
       * destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
   (* t_unit *)
