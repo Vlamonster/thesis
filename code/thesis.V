@@ -832,6 +832,24 @@ Proof.
     + apply total_lt_refl in H1. simp state_lt'. rewrite H1. apply orb_true_r.
 Qed.
 
+Lemma next_state_options: forall (m: PA Ann) (f: CNF),
+  next_state (state m f) = None \/
+  next_state (state m f) = Some fail \/ 
+  exists m': PA Ann, next_state (state m f) = Some (state m' f).
+Proof.
+  intros. funelim (next_state (state m f)).
+  - left. reflexivity.
+  - injection eqargs as eqargs. subst m0 f0. rewrite Heqcall. destruct (find_conflict m f).
+    + destruct (split_last_decision m).
+      * destruct p. right. right. now exists (p ++p neg l).
+      * right. now left.
+    + destruct (find_unit m f).
+      * destruct p. right. right. now exists (m ++p l).
+      * destruct (find_decision m f).
+        -- right. right. now exists (m ++d l).
+        -- now left.
+Qed.
+
 Module TransLtExamples.
 
 Example prefix_lt_head: PrefixLt [1] [2].
