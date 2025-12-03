@@ -955,6 +955,9 @@ Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
   - admit.
 Admitted.
 
+Lemma next_state__trans_lt: forall (s s': State), next_state s = Some s' -> s >> s'.
+Proof. intros. apply trans__trans_lt. apply next_state_sound. assumption. Qed.
+
 Theorem fail_final: Final fail.
 Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
 
