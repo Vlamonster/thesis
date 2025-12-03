@@ -1,7 +1,7 @@
 From Equations Require Import Equations.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Bool.Bool.
-From Stdlib Require Import List Relations.
+From Stdlib Require Import List Relations Lia.
 Import ListNotations.
 
 Open Scope bool_scope.
@@ -751,9 +751,24 @@ l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
 Equations l_in_f (l: Lit) (f: CNF): bool :=
 l_in_f l f := existsb (l_in_c l) f.
 
+Equations dedupe_by {A: Type} (eq: A -> A -> bool) (l: list A): list A by wf (length l) lt :=
+dedupe_by eq []       := [];
+dedupe_by eq (a :: l) := a :: dedupe_by eq (filter (fun b => negb (eq a b)) l).
+Next Obligation.
+  eapply Nat.le_lt_trans.
+  - apply filter_length_le.
+  - auto with arith.
+Qed.
+
+Equations eqb_by_atom (la la': Lit * Ann): bool :=
+eqb_by_atom (l, _) (l', _) := (l =? l') || (l =? neg l'). 
+
 Equations clean (s: State): State :=
 clean fail        := fail;
-clean (state m f) := state (filter (fun (la: Lit * Ann) => l_in_f (fst la) f) m) f.
+clean (state m f) := 
+  let bounded := filter (fun (la: Lit * Ann) => l_in_f (fst la) f) m in
+  let deduped := dedupe_by eqb_by_atom bounded in
+  state deduped f.
 
 Inductive StateLt: relation State :=
 | s_clean (s s': State):
@@ -882,6 +897,16 @@ Proof. apply t_tail. auto. apply t_total. auto. Qed.
 
 Example total_lt_tail_refl: TotalLt ([1], 1) ([1], 2).
 Proof. now apply total_lt_refl. Qed.
+
+Example clean_dedupes: 
+  clean (state ([] ++p Pos 2 ++p Pos 1 ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]]) = 
+  state ([] ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]].
+Proof. reflexivity. Qed.
+
+Example clean_bounds: 
+  clean (state ([] ++p Pos 3 ++p Pos 5 ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]]) = 
+  state ([] ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]].
+Proof. reflexivity. Qed.
 
 End TransLtExamples.
 
