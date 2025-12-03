@@ -735,26 +735,26 @@ Inductive TotalLt: relation (list nat * nat) :=
   TotalLt (m, l) (m', l') ->
   TotalLt (n :: m, l) (n' :: m', l').
 
-Inductive TransLt': relation State :=
+Inductive StateLt': relation State :=
 | tl_fail (s: State): 
-  TransLt' fail s
+  StateLt' fail s
 | tl_prefix (m m': PA Ann) (f: CNF):
   PrefixLt (score m f) (score m' f) ->
-  TransLt' (state m f) (state m' f)
+  StateLt' (state m f) (state m' f)
 | tl_total (m m': PA Ann) (f: CNF):
   TotalLt (score m f, score_total m f) (score m' f, score_total m f) ->
-  TransLt' (state m f) (state m' f).
+  StateLt' (state m f) (state m' f).
 
 (* Placeholder *)
 Definition clean: State -> State := id.
 
-Inductive TransLt: relation State :=
+Inductive StateLt: relation State :=
 | tl_clean (s s': State):
-  TransLt' (clean s) (clean s') ->
-  TransLt s s'.
+  StateLt' (clean s) (clean s') ->
+  StateLt s s'.
 
-Infix ">>*" := (fun (s s': State) => TransLt' s' s) (at level 70).
-Infix ">>" := (fun (s s': State) => TransLt s' s) (at level 70).
+Infix ">>*" := (fun (s s': State) => StateLt' s' s) (at level 70).
+Infix ">>" := (fun (s s': State) => StateLt s' s) (at level 70).
 
 Equations prefix_lt (m m': list nat): bool :=
 prefix_lt []       _          := false;
@@ -844,7 +844,7 @@ Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
       m f c_unit l_unit Hl_in_c Hc_in_f Hconflict Hundef |
       m f c_decide l_decide Hx_in_c Hc_in_f Hundef |
       m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
-    ]; subst s s'.
+    ]; subst s s'; constructor.
   - constructor.
   - apply tl_prefix. admit.
   - apply tl_total. admit.
