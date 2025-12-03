@@ -773,6 +773,33 @@ Proof.
       * apply H in H6. rewrite H6. rewrite Nat.eqb_refl. apply orb_true_r.
 Qed.
 
+Equations total_lt (m m': list nat) (l l': nat): bool :=
+total_lt []       []         l l' := l <? l';
+total_lt []       _          _ _  := false;
+total_lt _        []         _ _  := false;
+total_lt (n :: m) (n' :: m') l l' := (n =? n')%nat && (total_lt m m' l l').
+
+Lemma total_lt_refl: forall (m m': list nat) (l l': nat), 
+  total_lt m m' l l' = true <-> TotalLt (m, l) (m', l').
+Proof.
+  intros. funelim (total_lt m m' l l').
+  - split.
+    + intros. apply t_total. now apply Nat.ltb_lt.
+    + intros. inversion H. subst. now apply Nat.ltb_lt.
+  - split.
+    + intros. discriminate.
+    + intros. inversion H.
+  - split.
+    + intros. discriminate.
+    + intros. inversion H.
+  - split.
+    + intros. apply Bool.andb_true_iff in H0. destruct H0. rewrite Nat.eqb_eq in H0.
+      subst n'. apply t_tail.
+      * reflexivity.
+      * now apply H.
+    + intros. inversion H0; subst. apply H in H8. rewrite H8. now rewrite Nat.eqb_refl.
+Qed.
+
 Module TransLtExamples.
 
 Example prefix_lt_head: PrefixLt [1] [2].
