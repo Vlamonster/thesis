@@ -926,6 +926,16 @@ Proof. reflexivity. Qed.
 
 End TransLtExamples.
 
+Lemma l_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
+  In l c -> In c f -> l_in_f l f = true.
+Proof. 
+  intros. simp l_in_f. rewrite existsb_exists. exists c. split.
+  - assumption.
+  - simp l_in_c. rewrite orb_true_iff. left. rewrite existsb_exists. exists l. split.
+    + assumption.
+    + apply eqb_lit_refl.
+Qed.
+
 Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
   intros. inversion H as 
     [
@@ -936,8 +946,7 @@ Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
     ]; subst s s'; constructor.
   - constructor.
   - simp clean. simpl. apply s_prefix. apply prefix_lt_refl.
-    assert (In l_unit c_unit -> In c_unit f -> l_in_f l_unit f = true). admit. 
-    rewrite (H0 Hl_in_c Hc_in_f). admit.
+    rewrite (l_in_c__c_in_f__l_in_f f c_unit l_unit Hl_in_c Hc_in_f). admit.
   - admit.
   - admit.
 Admitted.
