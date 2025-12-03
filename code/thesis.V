@@ -742,7 +742,7 @@ Inductive StateLt': relation State :=
   PrefixLt (score m f) (score m' f) ->
   StateLt' (state m f) (state m' f)
 | s_total (m m': PA Ann) (f: CNF):
-  TotalLt (score m f, score_total m f) (score m' f, score_total m f) ->
+  TotalLt (score m f, score_total m f) (score m' f, score_total m' f) ->
   StateLt' (state m f) (state m' f).
 
 (* Placeholder *)
@@ -807,6 +807,29 @@ Proof.
       * reflexivity.
       * now apply H.
     + intros. inversion H0; subst. apply H in H8. rewrite H8. now rewrite Nat.eqb_refl.
+Qed.
+
+Equations state_lt' (s s': State): bool :=
+state_lt' fail        _             := true;
+state_lt' _           fail          := false;
+state_lt' (state m f) (state m' f') :=
+  prefix_lt (score m f) (score m' f') ||
+  total_lt (score m f) (score m' f') (score_total m f) (score_total m' f').
+
+Lemma state_lt'_refl: forall (m m': PA Ann) (f: CNF), 
+  state_lt' (state m f) (state m' f) = true <-> state m' f >>* state m f.
+Proof.
+  intros. split.
+  - intros. funelim (state_lt' (state m f) (state m' f)).
+    + discriminate.
+    + discriminate.
+    + injection H0 as H0. subst m0 f0. injection H1 as H1. subst m'0 f'.
+      rewrite H in Heqcall. apply orb_true_iff in Heqcall. destruct Heqcall.
+      * apply s_prefix. now apply prefix_lt_refl.
+      * apply s_total. now apply total_lt_refl.
+  - intros. inversion H; subst.
+    + apply prefix_lt_refl in H1. simp state_lt'. rewrite H1. reflexivity.
+    + apply total_lt_refl in H1. simp state_lt'. rewrite H1. apply orb_true_r.
 Qed.
 
 Module TransLtExamples.
