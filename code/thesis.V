@@ -805,14 +805,26 @@ Module TransLtExamples.
 Example prefix_lt_head: PrefixLt [1] [2].
 Proof. apply p_head. auto. Qed.
 
+Example prefix_lt_head_refl: PrefixLt [1] [2].
+Proof. now apply prefix_lt_refl. Qed.
+
 Example prefix_lt_tail: PrefixLt [1;1] [1;2].
 Proof. apply p_tail. auto. apply p_head. auto. Qed.
+
+Example prefix_lt_tail_refl: PrefixLt [1;1] [1;2].
+Proof. now apply prefix_lt_refl. Qed.
 
 Example total_lt_total: TotalLt ([], 1) ([], 2).
 Proof. apply t_total. auto. Qed.
 
+Example total_lt_total_prefix: TotalLt ([], 1) ([], 2).
+Proof. now apply total_lt_refl. Qed.
+
 Example total_lt_tail: TotalLt ([1], 1) ([1], 2).
 Proof. apply t_tail. auto. apply t_total. auto. Qed.
+
+Example total_lt_tail_refl: TotalLt ([1], 1) ([1], 2).
+Proof. now apply total_lt_refl. Qed.
 
 End TransLtExamples.
 
