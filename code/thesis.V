@@ -1,11 +1,15 @@
 From Equations Require Import Equations.
-From Stdlib Require Import List Nat Relations.
+Require Import Coq.Arith.PeanoNat.
+Require Import Coq.Bool.Bool.
+From Stdlib Require Import List Relations.
 Import ListNotations.
+
+Open Scope bool_scope.
 
 (* Atoms are propositional symbols mapped to the naturals. *)
 Definition Atom: Type := nat.
 
-Definition eqb_atom := eqb.
+Definition eqb_atom := Nat.eqb.
 
 (* Literals are either positive or negated variants of atoms. *)
 Inductive Lit: Type :=
@@ -13,13 +17,13 @@ Inductive Lit: Type :=
 | Neg (p: Atom).
 
 Lemma eqb_atom_refl: forall (p: Atom), eqb_atom p p = true.
-Proof. apply PeanoNat.Nat.eqb_refl. Qed.
+Proof. apply Nat.eqb_refl. Qed.
 
 Lemma eqb_atom_sym: forall (p1 p2: Atom), eqb_atom p1 p2 = eqb_atom p2 p1.
-Proof. apply PeanoNat.Nat.eqb_sym. Qed.
+Proof. apply Nat.eqb_sym. Qed.
 
 Lemma eqb_atom_eq: forall (p1 p2: Atom), eqb_atom p1 p2 = true <-> p1 = p2.
-Proof. apply PeanoNat.Nat.eqb_eq. Qed.
+Proof. apply Nat.eqb_eq. Qed.
 
 Equations eqb_lit (l1 l2: Lit): bool :=
 eqb_lit (Pos p1) (Pos p2) := eqb_atom p1 p2;
@@ -742,6 +746,32 @@ Inductive TransLt: relation State :=
   TransLt (state m f) (state m' f).
 
 Infix ">>" := (fun (s s': State) => TransLt s' s) (at level 70).
+
+Equations prefix_lt (m m': list nat): bool :=
+prefix_lt []       _          := false;
+prefix_lt _        []         := false;
+prefix_lt (n :: m) (n' :: m') := (n <? n') || (n =? n')%nat && (prefix_lt m m').
+
+Lemma prefix_lt_refl: forall (m m': list nat), prefix_lt m m' = true <-> PrefixLt m m'.
+Proof.
+  intros. funelim (prefix_lt m m').
+  - split.
+    + intros. discriminate.
+    + intros. inversion H.
+  - split.
+    + intros. discriminate.
+    + intros. inversion H.
+  - split.
+    + intros. destruct (n <? n') eqn:G.
+      * apply p_head. apply Nat.ltb_lt. assumption.
+      * simpl in H0. rewrite Bool.andb_true_iff in H0. destruct H0.
+        rewrite Nat.eqb_eq in H0. subst n'. apply p_tail.
+        -- reflexivity.
+        -- now apply H.
+    + intros. inversion H0; subst.
+      * apply Nat.ltb_lt in H2. now rewrite H2.
+      * apply H in H6. rewrite H6. rewrite Nat.eqb_refl. apply orb_true_r.
+Qed.
 
 Module TransLtExamples.
 
