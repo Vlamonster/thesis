@@ -736,12 +736,12 @@ Inductive TotalLt: relation (list nat * nat) :=
   TotalLt (n :: m, l) (n' :: m', l').
 
 Inductive StateLt': relation State :=
-| tl_fail (s: State): 
+| s_fail (s: State): 
   StateLt' fail s
-| tl_prefix (m m': PA Ann) (f: CNF):
+| s_prefix (m m': PA Ann) (f: CNF):
   PrefixLt (score m f) (score m' f) ->
   StateLt' (state m f) (state m' f)
-| tl_total (m m': PA Ann) (f: CNF):
+| s_total (m m': PA Ann) (f: CNF):
   TotalLt (score m f, score_total m f) (score m' f, score_total m f) ->
   StateLt' (state m f) (state m' f).
 
@@ -749,7 +749,7 @@ Inductive StateLt': relation State :=
 Definition clean: State -> State := id.
 
 Inductive StateLt: relation State :=
-| tl_clean (s s': State):
+| s_clean (s s': State):
   StateLt' (clean s) (clean s') ->
   StateLt s s'.
 
@@ -846,9 +846,9 @@ Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
       m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
     ]; subst s s'; constructor.
   - constructor.
-  - apply tl_prefix. admit.
-  - apply tl_total. admit.
-  - apply tl_prefix. admit.
+  - apply s_prefix. admit.
+  - apply s_total. admit.
+  - apply s_prefix. admit.
 Admitted.
 
 Theorem fail_final: Final fail.
