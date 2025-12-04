@@ -1055,7 +1055,7 @@ Lemma trans__state_lt: forall (s s': State), s ==> s' -> s >> s'.
       m f c_decide l_decide Hx_in_c Hc_in_f Hundef |
       m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
     ]; subst s s'; constructor.
-  - admit.
+  - simp clean. constructor.
   - simp clean. simpl. simp is_bounded. apply s_prefix. apply prefix_lt_refl.
     rewrite (l_in_c__c_in_f__l_in_f f c_unit l_unit Hl_in_c Hc_in_f).
     pose proof (dedupe_prop (filter (is_bounded f) m) l_unit (undef__filter_undef m l_unit (is_bounded f) Hundef)).
