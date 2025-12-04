@@ -1069,10 +1069,22 @@ Lemma next_state__state_lt: forall (s s': State), next_state s = Some s' -> s >>
 Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
 
 Lemma wf_state_lt: well_founded StateLt.
-Proof. 
-  unfold well_founded. destruct a.
-  - constructor. intros. inversion H; subst. inversion H0.
-  - constructor. intros. admit.
+Proof.
+  unfold well_founded. intros s. constructor. intros s' H. destruct s.
+  - inversion H. inversion H0.
+  - destruct H. inversion H.
+    (* fail *)
+    + destruct s.
+      -- constructor. intros. inversion H0. inversion H3.
+      -- discriminate.
+    (* PrefixLt *)
+    + induction H2.
+      * admit.
+      * assumption.
+    (* TotalLt *)
+    + induction H2.
+      * admit.
+      * assumption.
 Admitted.
 
 Theorem fail_final: Final fail.
