@@ -943,8 +943,8 @@ Proof.
     + apply eqb_lit_refl.
 Qed.
 
-Lemma undef__no_dupes: forall (m: PA Ann) (l: Lit), 
-  Undef m l -> forallb (neqb_of eqb_by_atom (l, false)) m = true.
+Lemma undef__no_dupes: forall (m: PA Ann) (l: Lit) (b: bool), 
+  Undef m l -> forallb (neqb_of eqb_by_atom (l, b)) m = true.
 Proof.
   unfold Undef. induction m.
   - intros. simpl. reflexivity.
@@ -966,7 +966,17 @@ Lemma dedupe_prop: forall (m: PA Ann) (l: Lit),
 Proof.
   intros. funelim (dedupe_by eqb_by_atom m).
   - reflexivity.
-  - simp dedupe_by. apply undef__no_dupes in H0. apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
+  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 false) in H0. 
+    apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
+Qed.
+
+Lemma dedupe_dec: forall (m: PA Ann) (l: Lit), 
+  Undef m l -> dedupe_by eqb_by_atom (m ++d l) = dedupe_by eqb_by_atom m ++d l.
+Proof.
+  intros. funelim (dedupe_by eqb_by_atom m).
+  - reflexivity.
+  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 true) in H0. 
+    apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
 Qed.
 
 Lemma l_eval_some_in: forall (m: PA Ann) (l: Lit) (b: bool), 
