@@ -72,6 +72,9 @@ Proof. intros. funelim (neg l); try auto. Qed.
 Lemma eqb_lit_neg_compat: forall (l1 l2: Lit), (l1 =? l2) = (neg l1 =? neg l2).
 Proof. intros. destruct l1, l2; try auto. Qed.
 
+Lemma eq_lit_neg_compat: forall (l1 l2: Lit), l1 = l2 <-> neg l1 = neg l2.
+Proof. intros. repeat rewrite <- eqb_lit_eq. destruct l1, l2; try intuition. Qed.
+
 Definition Unit (C: Clause): Prop := exists (l: Lit), C = [l].
 
 (* A partial assignment for annoted literals. See `l_eval` for evaluation. *)
