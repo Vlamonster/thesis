@@ -751,9 +751,13 @@ l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
 Equations l_in_f (l: Lit) (f: CNF): bool :=
 l_in_f l f := existsb (l_in_c l) f.
 
-Equations dedupe_by {A: Type} (eq: A -> A -> bool) (l: list A): list A by wf (length l) lt :=
+Equations neqb_of (eq: Lit * Ann -> Lit * Ann -> bool) (l l': Lit * Ann): bool :=
+neqb_of eq a b := negb (eq a b).
+
+Equations dedupe_by (eq: Lit * Ann -> Lit * Ann -> bool) (m: list (Lit * Ann)): 
+  list (Lit * Ann) by wf (length m) lt :=
 dedupe_by eq []       := [];
-dedupe_by eq (a :: l) := a :: dedupe_by eq (filter (fun b => negb (eq a b)) l).
+dedupe_by eq (l :: m) := l :: dedupe_by eq (filter (neqb_of eq l) m).
 Next Obligation.
   eapply Nat.le_lt_trans.
   - apply filter_length_le.
@@ -939,7 +943,33 @@ Proof.
     + apply eqb_lit_refl.
 Qed.
 
-Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
+Lemma undef__no_dupes: forall (m: PA Ann) (l: Lit), 
+  Undef m l -> forallb (neqb_of eqb_by_atom (l, false)) m = true.
+Proof.
+  unfold Undef. induction m.
+  - intros. simpl. reflexivity.
+  - intros. simpl. simp neqb_of. apply andb_true_iff. split.
+    + destruct a. simp eqb_by_atom. destruct (l =? l0) eqn:G1, (l =? neg l0) eqn:G2.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simpl. reflexivity.
+    + apply IHm. destruct a. destruct (l =? l0) eqn:G1, (l =? neg l0) eqn:G2.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
+      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. assumption.
+Qed.
+
+Lemma dedupe_prop: forall (m: PA Ann) (f: CNF) (l: Lit), 
+  Undef m l -> dedupe_by eqb_by_atom (m ++p l) = dedupe_by eqb_by_atom m ++p l.
+Proof.
+  intros. funelim (dedupe_by eqb_by_atom m).
+  - reflexivity.
+  - simp dedupe_by. apply undef__no_dupes in H0. apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
+Qed.
+
+Lemma trans__state_lt: forall (s s': State), s ==> s' -> s >> s'.
   intros. inversion H as 
     [
       m f c_conflict Hc_in_f Hconflict Hno_dec |
@@ -955,8 +985,8 @@ Lemma trans__trans_lt: forall (s s': State), s ==> s' -> s >> s'.
   - admit.
 Admitted.
 
-Lemma next_state__trans_lt: forall (s s': State), next_state s = Some s' -> s >> s'.
-Proof. intros. apply trans__trans_lt. apply next_state_sound. assumption. Qed.
+Lemma next_state__state_lt: forall (s s': State), next_state s = Some s' -> s >> s'.
+Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
 
 Theorem fail_final: Final fail.
 Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
