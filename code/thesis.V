@@ -1032,7 +1032,7 @@ Proof.
       simpl in H0. apply H. assumption.
 Qed.
 
-Lemma undef__bound_undef: forall (m: PA Ann) (l: Lit) (test: Lit * Ann -> bool),
+Lemma undef__filter_undef: forall (m: PA Ann) (l: Lit) (test: Lit * Ann -> bool),
   Undef m l -> Undef (filter test m) l.
 Proof.
   unfold Undef. intros. pose proof (incl_filter test m). unfold incl in H0.
@@ -1055,7 +1055,7 @@ Lemma trans__state_lt: forall (s s': State), s ==> s' -> s >> s'.
   - constructor.
   - simp clean. simpl. simp is_bounded. apply s_prefix. apply prefix_lt_refl.
     rewrite (l_in_c__c_in_f__l_in_f f c_unit l_unit Hl_in_c Hc_in_f).
-    pose proof (dedupe_prop (filter (is_bounded f) m) l_unit (undef__bound_undef m l_unit (is_bounded f) Hundef)).
+    pose proof (dedupe_prop (filter (is_bounded f) m) l_unit (undef__filter_undef m l_unit (is_bounded f) Hundef)).
     simp dedupe_by in *. rewrite H0. clear H0.
     admit.
   - admit.
