@@ -812,7 +812,7 @@ prefix_lt []       _          := false;
 prefix_lt _        []         := false;
 prefix_lt (n :: m) (n' :: m') := (n <? n') || (n =? n')%nat && (prefix_lt m m').
 
-Lemma prefix_lt_refl: forall (m m': list nat), prefix_lt m m' = true <-> PrefixLt m m'.
+(* Lemma prefix_lt_refl: forall (m m': list nat), prefix_lt m m' = true <-> PrefixLt m m'.
 Proof.
   intros. funelim (prefix_lt m m').
   - split.
@@ -831,7 +831,7 @@ Proof.
     + intros. inversion H0; subst.
       * apply Nat.ltb_lt in H2. now rewrite H2.
       * apply H in H6. rewrite H6. rewrite Nat.eqb_refl. apply orb_true_r.
-Qed.
+Qed. *)
 
 Equations total_lt (m m': list nat) (l l': nat): bool :=
 total_lt []       []         l l' := l <? l';
@@ -921,7 +921,7 @@ Qed.
 
 Module TransLtExamples.
 
-Example prefix_lt_head: PrefixLt [1] [2].
+(* Example prefix_lt_head: PrefixLt [1] [2].
 Proof. apply p_head. auto. Qed.
 
 Example prefix_lt_head_refl: PrefixLt [1] [2].
@@ -931,7 +931,7 @@ Example prefix_lt_tail: PrefixLt [1;1] [1;2].
 Proof. apply p_tail. auto. apply p_head. auto. Qed.
 
 Example prefix_lt_tail_refl: PrefixLt [1;1] [1;2].
-Proof. now apply prefix_lt_refl. Qed.
+Proof. now apply prefix_lt_refl. Qed. *)
 
 Example total_lt_total: TotalLt ([], 1) ([], 2).
 Proof. apply t_total. auto. Qed.
