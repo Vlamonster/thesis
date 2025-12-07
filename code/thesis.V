@@ -1,7 +1,7 @@
 From Equations Require Import Equations.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Bool.Bool.
-From Stdlib Require Import List Relations Lia.
+From Stdlib Require Import List Relations Wellfounded.
 Import ListNotations.
 
 Open Scope bool_scope.
@@ -713,6 +713,10 @@ Equations max_lit_f (f: CNF): nat :=
 max_lit_f []       := 0;
 max_lit_f (c :: f) := max (max_lit_c c) (max_lit_f f).
 
+Equations max_lit (s: State): nat :=
+max_lit fail        := 0;
+max_lit (state _ f) := max_lit_f f. 
+
 Equations score_aux (m: PA Ann) (n x: nat): list nat :=
 score_aux []        n x := [n - x];
 score_aux (m ++p l) n x := score_aux m n (S x);
@@ -733,41 +737,6 @@ Definition Bounded (m: PA Ann) (f: CNF): Prop :=
 
 Definition Clean (m: PA Ann) (f: CNF): Prop :=
   NoDuplicates m /\ Bounded m f.
-
-Inductive PrefixLt (x: nat): relation (list nat) :=
-| p_head (m m': list nat) (n n': nat):
-  length (n :: m) <= x ->
-  length (n' :: m') <= x ->
-  n < n' ->
-  PrefixLt x (n :: m) (n' :: m')
-| p_tail (m m': list nat) (n: nat):
-  length (n :: m) <= x ->
-  length (n :: m') <= x ->
-  PrefixLt x m m' ->
-  PrefixLt x (n :: m) (n :: m').
-
-Inductive TotalLt: relation (list nat * nat) :=
-| t_total (l l': nat):
-  l < l' ->
-  TotalLt ([], l) ([], l')
-| t_tail (m m': list nat) (n n' l l': nat):
-  n = n' ->
-  TotalLt (m, l) (m', l') ->
-  TotalLt (n :: m, l) (n' :: m', l').
-
-Inductive StateLt': relation State :=
-| s_fail (m: PA Ann) (f: CNF):
-  StateLt' fail (state m f)
-| s_prefix (m m': PA Ann) (f: CNF):
-  Clean m f ->
-  Clean m' f ->
-  PrefixLt (max_lit_f f) (score m f) (score m' f) ->
-  StateLt' (state m f) (state m' f)
-| s_total (m m': PA Ann) (f: CNF):
-  Clean m f ->
-  Clean m' f ->
-  TotalLt (score m f, score_total m f) (score m' f, score_total m' f) ->
-  StateLt' (state m f) (state m' f).
 
 Equations l_in_c (l: Lit) (f: Clause): bool :=
 l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
@@ -801,10 +770,63 @@ clean (state m f) :=
   let deduped := dedupe_by eqb_by_atom bounded in
   state deduped f.
 
-Definition StateLt: relation State := MR StateLt' clean.
+Inductive FailLt: relation State :=
+| f_fail (m: PA Ann) (f: CNF):
+  FailLt fail (state m f).
 
-Infix ">>*" := (fun (s s': State) => StateLt' s' s) (at level 70).
-Infix ">>" := (fun (s s': State) => StateLt s' s) (at level 70).
+Lemma wf_fail_lt: well_founded FailLt.
+Proof.
+  unfold well_founded. intros m. constructor. intros m' Hlt. destruct Hlt.
+  constructor. intros m' Hlt. inversion Hlt.
+Qed.
+
+Inductive PrefixLt (x: nat): relation (list nat) :=
+| p_head (m m': list nat) (n n': nat):
+  length (n :: m) <= x ->
+  length (n' :: m') <= x ->
+  n < n' ->
+  PrefixLt x (n :: m) (n' :: m')
+| p_tail (m m': list nat) (n: nat):
+  length (n :: m) <= x ->
+  length (n :: m') <= x ->
+  PrefixLt x m m' ->
+  PrefixLt x (n :: m) (n :: m').
+
+Lemma wf_prefix_lt: forall (x: nat), well_founded (PrefixLt x).
+Admitted.
+
+Definition TotalLt: relation nat := lt.
+
+Lemma wf_total_lt: well_founded TotalLt.
+Proof. apply lt_wf. Qed.
+
+Definition StateLexLt (x: nat): relation (State * list nat * nat) :=
+  slexprod _ _ (slexprod _ _ FailLt (PrefixLt x)) TotalLt.
+
+Lemma wf_state_lex_lt: forall (x: nat), well_founded (StateLexLt x).
+Proof.
+  intros. apply wf_slexprod.
+  - apply wf_slexprod.
+    + apply wf_fail_lt.
+    + apply wf_prefix_lt.
+  - apply wf_total_lt.
+Qed.
+
+Equations state_measure (s: State): State * list nat * nat :=
+state_measure fail        := (fail     , []       , 0              );
+state_measure (state m f) := (state m f, score m f, score_total m f).
+
+Definition StateCleanLt (s: State): relation State := MR (StateLexLt (max_lit s)) state_measure.
+
+Lemma wf_state_clean_lt: forall (s: State), well_founded (StateCleanLt s).
+Proof. intros. apply measure_wf. apply wf_state_lex_lt. Qed.
+
+Definition StateLt (s: State): relation State := MR (StateCleanLt s) clean.
+
+Lemma wf_state_lt: forall (s: State), well_founded (StateLt s).
+Proof. intros. apply measure_wf. apply wf_state_clean_lt. Qed.
+
+Infix ">>" := (fun (s s': State) => StateLt s s' s) (at level 70).
 
 Equations prefix_lt (x: nat) (m m': list nat): bool :=
 prefix_lt _     []       _            := false;
@@ -886,73 +908,9 @@ Proof.
         rewrite Nat.eqb_refl. simpl. apply orb_true_r.
 Qed.
 
-Equations total_lt (m m': list nat) (l l': nat): bool :=
-total_lt []       []         l l' := l <? l';
-total_lt []       _          _ _  := false;
-total_lt _        []         _ _  := false;
-total_lt (n :: m) (n' :: m') l l' := (n =? n')%nat && (total_lt m m' l l').
-
-Lemma total_lt_refl: forall (m m': list nat) (l l': nat), 
-  total_lt m m' l l' = true <-> TotalLt (m, l) (m', l').
-Proof.
-  intros. funelim (total_lt m m' l l').
-  - split.
-    + intros. apply t_total. now apply Nat.ltb_lt.
-    + intros. inversion H. subst. now apply Nat.ltb_lt.
-  - split.
-    + intros. discriminate.
-    + intros. inversion H.
-  - split.
-    + intros. discriminate.
-    + intros. inversion H.
-  - split.
-    + intros. apply Bool.andb_true_iff in H0. destruct H0. rewrite Nat.eqb_eq in H0.
-      subst n'. apply t_tail.
-      * reflexivity.
-      * now apply H.
-    + intros. inversion H0; subst. apply H in H8. rewrite H8. now rewrite Nat.eqb_refl.
-Qed.
-
-(* Equations state_lt' (s s': State): bool :=
-state_lt' fail        _             := true;
-state_lt' _           fail          := false;
-state_lt' (state m f) (state m' f') :=
-  prefix_lt (score m f) (score m' f') ||
-  total_lt (score m f) (score m' f') (score_total m f) (score_total m' f'). *)
-
-(* Lemma state_lt'_refl: forall (m m': PA Ann) (f: CNF), 
-  state_lt' (state m f) (state m' f) = true <-> state m' f >>* state m f.
-Admitted.
-  Proof.
-  intros. split.
-  - intros. funelim (state_lt' (state m f) (state m' f)).
-    + discriminate.
-    + discriminate.
-    + injection H0 as H0. subst m0 f0. injection H1 as H1. subst m'0 f'.
-      rewrite H in Heqcall. apply orb_true_iff in Heqcall. destruct Heqcall.
-      * apply s_prefix. now apply prefix_lt_refl.
-      * apply s_total. now apply total_lt_refl.
-  - intros. inversion H; subst.
-    + apply prefix_lt_refl in H1. simp state_lt'. rewrite H1. reflexivity.
-    + apply total_lt_refl in H1. simp state_lt'. rewrite H1. apply orb_true_r.
-Qed. *)
-
-(* Equations state_lt (s s': State): bool :=
-state_lt s s' := state_lt' (clean s) (clean s'). *)
-
 Lemma clean_same_formula: forall (m m': PA Ann) (f f': CNF),
   clean (state m f) = state m' f' -> f = f'.
 Proof. intros. simp clean in H. simpl in H. injection H as _ <-. reflexivity. Qed.
-
-(* Lemma state_lt_refl: forall (m m': PA Ann) (f: CNF),
-  state_lt (state m f) (state m' f) = true <-> state m' f >> state m f.
-Admitted.
-  Proof.
-  intros. split.
-  - intros. funelim (state_lt (state m f) (state m' f)). rewrite H in Heqcall.
-    constructor. simp clean in *. simpl in *. now apply state_lt'_refl.
-  - intros. inversion H; subst. simp state_lt. simp clean in *. simpl in *. now apply state_lt'_refl.
-Qed. *)
 
 Lemma next_state_options: forall (m: PA Ann) (f: CNF),
   next_state (state m f) = None \/
@@ -971,38 +929,6 @@ Proof.
         -- right. right. now exists (m ++d l).
         -- now left.
 Qed.
-
-Module TransLtExamples.
-
-Example prefix_lt_head_refl: PrefixLt 2 [1] [2].
-Proof. now apply prefix_lt_refl. Qed.
-
-Example prefix_lt_tail_refl: PrefixLt 2 [1;1] [1;2].
-Proof. now apply prefix_lt_refl. Qed. 
-
-Example total_lt_total: TotalLt ([], 1) ([], 2).
-Proof. apply t_total. auto. Qed.
-
-Example total_lt_total_prefix: TotalLt ([], 1) ([], 2).
-Proof. now apply total_lt_refl. Qed.
-
-Example total_lt_tail: TotalLt ([1], 1) ([1], 2).
-Proof. apply t_tail. auto. apply t_total. auto. Qed.
-
-Example total_lt_tail_refl: TotalLt ([1], 1) ([1], 2).
-Proof. now apply total_lt_refl. Qed.
-
-Example clean_dedupes: 
-  clean (state ([] ++p Pos 2 ++p Pos 1 ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]]) = 
-  state ([] ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]].
-Proof. reflexivity. Qed.
-
-Example clean_bounds: 
-  clean (state ([] ++p Pos 3 ++p Pos 5 ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]]) = 
-  state ([] ++p Neg 1 ++d Pos 2) [[Pos 1];[Pos 2]].
-Proof. reflexivity. Qed.
-
-End TransLtExamples.
 
 Lemma l_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
   In l c -> In c f -> l_in_f l f = true.
@@ -1117,45 +1043,9 @@ Qed.
 
 Lemma trans__state_lt: forall (s s': State), s ==> s' -> s >> s'.
 Admitted.
-(* intros. inversion H as 
-    [
-      m f c_conflict Hc_in_f Hconflict Hno_dec |
-      m f c_unit l_unit Hl_in_c Hc_in_f Hconflict Hundef |
-      m f c_decide l_decide Hx_in_c Hc_in_f Hundef |
-      m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
-    ]; subst s s'; constructor.
-  - simp clean. constructor.
-  - simp clean. simpl. simp is_bounded. apply s_prefix. apply prefix_lt_refl.
-    rewrite (l_in_c__c_in_f__l_in_f f c_unit l_unit Hl_in_c Hc_in_f).
-    pose proof (dedupe_prop (filter (is_bounded f) m) l_unit (undef__filter_undef m l_unit (is_bounded f) Hundef)).
-    simp dedupe_by in *. rewrite H0. clear H0.
-    admit.
-  - admit.
-  - admit.
-Admitted. *)
 
 Lemma next_state__state_lt: forall (s s': State), next_state s = Some s' -> s >> s'.
 Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
-
-Lemma wf_state_lt: well_founded StateLt.
-Admitted.
-(* Proof.
-  unfold well_founded. intros s. constructor. intros s' H. destruct s.
-  - inversion H. inversion H0.
-  - destruct H. inversion H.
-    (* fail *)
-    + destruct s.
-      -- constructor. intros. inversion H0. inversion H3.
-      -- discriminate.
-    (* PrefixLt *)
-    + induction H2.
-      * admit.
-      * assumption.
-    (* TotalLt *)
-    + induction H2.
-      * admit.
-      * assumption.
-Admitted. *)
 
 Theorem fail_final: Final fail.
 Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
