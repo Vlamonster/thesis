@@ -1136,6 +1136,18 @@ Proof.
 Qed.
 
 Lemma trans__state_lt: forall (s s': State), s ==> s' -> s >> s'.
+Proof.
+  intros. inversion H.
+  (* t_fail *)
+  - unfold StateLt. unfold StateCleanLt. unfold StateLexLt. unfold MR. simp clean.
+    simpl. simp state_measure. apply left_slex. apply left_slex. constructor.
+  (* t_unit *)
+  - unfold StateLt. unfold StateCleanLt. unfold StateLexLt. unfold MR. simp clean.
+    simpl. simp state_measure. apply left_slex. admit.
+  (* t_decide *)
+  - admit.
+  (* t_backtrack *)
+  - admit.
 Admitted.
 
 Lemma next_state__state_lt: forall (s s': State), next_state s = Some s' -> s >> s'.
