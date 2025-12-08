@@ -78,21 +78,25 @@ Proof. intros. repeat rewrite <- eqb_lit_eq. now rewrite eqb_lit_neg_compat. Qed
 Definition Unit (C: Clause): Prop := exists (l: Lit), C = [l].
 
 (* A partial assignment for annoted literals. See `l_eval` for evaluation. *)
-Definition PA (A: Type): Type := list (Lit * A).
+Definition PA: Type := list (Lit * bool).
+
+Notation "m ++a n" := (n ++ m) (at level 65, left associativity).
+Notation "m ++d l" := ((l, true) :: m) (at level 65, left associativity).
+Notation "m ++p l" := ((l, false) :: m) (at level 65, left associativity).
 
 Equations l_extract (l: Lit): Atom :=
 l_extract (Pos p) := p;
 l_extract (Neg p) := p.
 
 (* The first instance of `l` or `neg l` determines the value. *)
-Equations l_eval {A: Type} (m: PA A) (l: Lit): option bool :=
+Equations l_eval (m: PA) (l: Lit): option bool :=
 l_eval [] _ := None;
 l_eval ((l', _) :: m) l with l =? l', l =? neg l' :=
   | true, _    := Some true
   | _   , true := Some false
   | _   , _    := l_eval m l.
 
-Equations l_ann {A: Type} (m: PA A) (l: Lit): option A :=
+Equations l_ann (m: PA) (l: Lit): option bool :=
 l_ann [] _ := None;
 l_ann ((l', a) :: m) l with l =? l', l =? neg l' :=
   | true, _    := Some a
@@ -102,7 +106,7 @@ l_ann ((l', a) :: m) l with l =? l', l =? neg l' :=
 Equations l_remove (c: Clause) (l: Lit): Clause :=
 l_remove c l := filter (fun l' => negb (l =? l')) c.
 
-Equations c_eval {A: Type} (m: PA A) (c: Clause): option bool :=
+Equations c_eval (m: PA) (c: Clause): option bool :=
 c_eval m [] := Some false;
 c_eval m (l :: c) with l_eval m l, c_eval m c :=
   | Some true , _          := Some true
@@ -110,7 +114,7 @@ c_eval m (l :: c) with l_eval m l, c_eval m c :=
   | Some false, Some false := Some false
   | _         , _          := None.
 
-Equations f_eval {A: Type} (m: PA A) (f: CNF): option bool :=
+Equations f_eval (m: PA) (f: CNF): option bool :=
 f_eval m [] := Some true;
 f_eval m (c :: f) with c_eval m c, f_eval m f :=
   | Some true , r          := r
@@ -119,18 +123,18 @@ f_eval m (c :: f) with c_eval m c, f_eval m f :=
   | None      , _          := None.
 
 Module EvalExamples.
-Compute l_eval [(Pos 1, tt)] (Pos 1).
-Compute l_eval [(Pos 1, tt)] (Neg 1).
+Compute l_eval ([] ++p Pos 1) (Pos 1).
+Compute l_eval ([] ++p Pos 1) (Neg 1).
 Compute c_eval [] [Pos 1; Pos 2].
-Compute c_eval [(Pos 1, tt)] [Pos 1; Pos 2].
-Compute c_eval [(Neg 1, tt)] [Pos 1; Pos 2].
-Compute c_eval [(Pos 2, tt)] [Pos 1; Pos 2].
+Compute c_eval ([] ++p Pos 1) [Pos 1; Pos 2].
+Compute c_eval ([] ++p Neg 1) [Pos 1; Pos 2].
+Compute c_eval ([] ++p Pos 2) [Pos 1; Pos 2].
 End EvalExamples.
 
-Definition Def {A: Type} (m: PA A) (l: Lit): Prop := exists (v: bool), l_eval m l = Some v.
-Definition Undef {A: Type} (m: PA A) (l: Lit): Prop := l_eval m l = None.
+Definition Def (m: PA) (l: Lit): Prop := exists (v: bool), l_eval m l = Some v.
+Definition Undef (m: PA) (l: Lit): Prop := l_eval m l = None.
 
-Lemma def_undef: forall {A: Type} (m: PA A) (l: Lit), Def m l <-> ~ Undef m l.
+Lemma def_undef: forall (m: PA) (l: Lit), Def m l <-> ~ Undef m l.
 Proof. 
   unfold Def, Undef. intros. destruct (l_eval m l).
   - intuition.
@@ -139,53 +143,46 @@ Proof.
   - intuition. destruct H. discriminate.
 Qed.
 
-Definition Total {A: Type} (m: PA A): Prop := forall (l: Lit), Def m l.
+Definition Total (m: PA): Prop := forall (l: Lit), Def m l.
 
-Definition Model {A: Type} (m: PA A) (f: CNF): Prop := f_eval m f = Some true.
+Definition Model (m: PA) (f: CNF): Prop := f_eval m f = Some true.
 
-Definition Sat (f: CNF): Prop := exists (A: Type) (m: PA A), Model m f.
+Definition Sat (f: CNF): Prop := exists (m: PA), Model m f.
 Definition Unsat (f: CNF): Prop := ~ Sat f.
 
-Definition Entails (A: Type) (f f': CNF): Prop := forall (m: PA A), Model m f -> Model m f'.
-Definition Equivalent (A: Type) (f f': CNF): Prop := Entails A f f' /\ Entails A f' f.
-
-(* Annotates whether the literal was decided or propagated. *)
-Definition Ann: Type := bool.
-
-Notation "m ++a n" := (n ++ m) (at level 65, left associativity).
-Notation "m ++d l" := ((l, true) :: m) (at level 65, left associativity).
-Notation "m ++p l" := ((l, false) :: m) (at level 65, left associativity).
+Definition Entails (f f': CNF): Prop := forall (m: PA), Model m f -> Model m f'.
+Definition Equivalent (f f': CNF): Prop := Entails f f' /\ Entails f' f.
 
 Inductive State: Type :=
 | fail
-| state (m: PA Ann) (f: CNF).
+| state (m: PA) (f: CNF).
 
-Definition NoDecisions (m: PA Ann): Prop := ~ exists (l: Lit), l_ann m l = Some true.
+Definition NoDecisions (m: PA): Prop := ~ exists (l: Lit), l_ann m l = Some true.
 
-Definition Conflicting (m: PA Ann) (c: Clause): Prop := c_eval m c = Some false.
+Definition Conflicting (m: PA) (c: Clause): Prop := c_eval m c = Some false.
 
 Inductive Trans: relation State :=
 (* Fail if all literals are assigned and there is a conflict. *)
-| t_fail (m: PA Ann) (f: CNF) (c: Clause):
+| t_fail (m: PA) (f: CNF) (c: Clause):
   In c f ->
   Conflicting m c ->
   NoDecisions m ->
   Trans (state m f) fail
 (* If a clause is false except for one unassigned literal, assign it to satisfy the clause. *)
-| t_unit (m: PA Ann) (f: CNF) (c: Clause) (l: Lit):
+| t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit):
   In l c ->
   In c f ->
   Conflicting m (l_remove c l) ->
   Undef m l ->
   Trans (state m f) (state (m ++p l) f)
 (* Arbitrarily set an unassigned literal in the formula to true. *)
-| t_decide (m: PA Ann) (f: CNF) (c: Clause) (l: Lit):
+| t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit):
   In l c \/ In (neg l) c ->
   In c f ->
   Undef m l ->
   Trans (state m f) (state (m ++d l) f)
 (* Backtrack by flipping the most recent decision literal. *)
-| t_backtrack (m n: PA Ann) (f: CNF) (c: Clause) (l: Lit):
+| t_backtrack (m n: PA) (f: CNF) (c: Clause) (l: Lit):
   In c f ->
   Conflicting (m ++d l ++a n) c ->
   NoDecisions n ->
@@ -253,7 +250,7 @@ Qed.
 
 End TransExamples.
 
-Equations split_last_decision (m: PA Ann): option (PA Ann * Lit) :=
+Equations split_last_decision (m: PA): option (PA * Lit) :=
 split_last_decision [] := None;
 split_last_decision (m ++d l) := Some (m, l);
 split_last_decision (m ++p l) := split_last_decision m.
@@ -262,37 +259,37 @@ Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
 option_bind f (Some a) := f a.
 
-Equations is_conflict (m: PA Ann) (c: Clause): bool :=
+Equations is_conflict (m: PA) (c: Clause): bool :=
 is_conflict m c with c_eval m c :=
   | Some false := true
   | _          := false.
 
-Equations is_undefined_c (m: PA Ann) (c: Clause): bool :=
+Equations is_undefined_c (m: PA) (c: Clause): bool :=
 is_undefined_c m c with c_eval m c := 
   | None := true
   | _    := false.
 
-Equations is_undefined_l (m: PA Ann) (l: Lit): bool :=
+Equations is_undefined_l (m: PA) (l: Lit): bool :=
 is_undefined_l m l with l_eval m l := 
   | None := true
   | _    := false.
 
-Equations find_conflict (m: PA Ann) (f: CNF): option Clause :=
+Equations find_conflict (m: PA) (f: CNF): option Clause :=
 find_conflict m f := find (is_conflict m) f.
 
-Equations find_unit_l (m: PA Ann) (c: Clause): option Lit :=
+Equations find_unit_l (m: PA) (c: Clause): option Lit :=
 find_unit_l m c := find (fun (l: Lit) => is_conflict m (l_remove c l)) c.
 
-Equations find_unit (m: PA Ann) (f: CNF): option (Clause * Lit) :=
+Equations find_unit (m: PA) (f: CNF): option (Clause * Lit) :=
 find_unit m [] := None;
 find_unit m (c :: f) with c_eval m c, find_unit_l m c :=
   | None, Some l := Some (c, l)
   | _   , _      := find_unit m f.
 
-Equations find_undef_l (m: PA Ann) (c: Clause): option Lit :=
+Equations find_undef_l (m: PA) (c: Clause): option Lit :=
 find_undef_l m c := find (is_undefined_l m) c.
 
-Equations find_decision (m: PA Ann) (f: CNF): option Lit :=
+Equations find_decision (m: PA) (f: CNF): option Lit :=
 find_decision m [] := None;
 find_decision m (c :: f) with find_undef_l m c, find_decision m f :=
   | Some l, _ := Some l
@@ -324,8 +321,8 @@ Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
 Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
 
-Lemma split_decomp: forall (m m': PA Ann) (l': Lit),
-  split_last_decision m = Some (m', l') -> exists (n': PA Ann), m = m' ++d l' ++a n' /\ NoDecisions n'.
+Lemma split_decomp: forall (m m': PA) (l': Lit),
+  split_last_decision m = Some (m', l') -> exists (n': PA), m = m' ++d l' ++a n' /\ NoDecisions n'.
 Proof.
   unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
   - discriminate.
@@ -341,10 +338,10 @@ Proof.
       * simpl in H3. assumption.
 Qed. 
 
-Lemma find_conflict_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
+Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
 Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
 
-Lemma find_conflict_conflicting: forall (m: PA Ann) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
+Lemma find_conflict_conflicting: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
 Proof. 
   unfold Conflicting. intros. simp find_conflict in H. apply find_some in H as [_ H]. funelim (is_conflict m c).
   - congruence.
@@ -352,21 +349,21 @@ Proof.
   - congruence.
 Qed.
 
-Lemma l_ann_prop_eq: forall (m: PA Ann) (l: Lit), l_ann (m ++p l) l = Some false. 
+Lemma l_ann_prop_eq: forall (m: PA) (l: Lit), l_ann (m ++p l) l = Some false. 
 Proof. intros. simp l_ann. rewrite eqb_lit_refl. simpl. reflexivity. Qed.
 
-Lemma l_ann_prop_eq_neg: forall (m: PA Ann) (l: Lit), l_ann (m ++p l) (neg l) = Some false. 
+Lemma l_ann_prop_eq_neg: forall (m: PA) (l: Lit), l_ann (m ++p l) (neg l) = Some false. 
 Proof. 
   intros. simp l_ann. rewrite eqb_lit_refl. pose proof (neg_neq l). apply eqb_lit_neq in H.
   rewrite eqb_lit_sym in H. rewrite H. simpl. reflexivity.
 Qed.
 
-Lemma l_ann_prop_neq: forall (m: PA Ann) (l l': Lit), l' <> l /\ l' <> neg l -> l_ann (m ++p l) l' = l_ann m l'. 
+Lemma l_ann_prop_neq: forall (m: PA) (l l': Lit), l' <> l /\ l' <> neg l -> l_ann (m ++p l) l' = l_ann m l'. 
 Proof. 
   intros. destruct H. simp l_ann. rewrite <- eqb_lit_neq in H, H0. rewrite H, H0. simpl. reflexivity.
 Qed.
 
-Lemma no_split__no_decision: forall (m: PA Ann), split_last_decision m = None -> NoDecisions m.
+Lemma no_split__no_decision: forall (m: PA), split_last_decision m = None -> NoDecisions m.
 Proof. 
   unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
   - destruct H0. discriminate.
@@ -382,13 +379,13 @@ Proof.
     + reflexivity.
 Qed.
 
-Lemma find_undef_l_in_c: forall (m: PA Ann) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
+Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
   intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
   apply find_some in Heqcall. destruct Heqcall. assumption.
 Qed.
 
-Lemma find_undef_l_undef: forall (m: PA Ann) (c: Clause) (l: Lit), find_undef_l m c = Some l -> Undef m l.
+Lemma find_undef_l_undef: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> Undef m l.
 Proof. 
   unfold Undef. intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
   apply find_some in Heqcall. destruct Heqcall. funelim (is_undefined_l m l).
@@ -396,7 +393,7 @@ Proof.
   - assumption.
 Qed.
 
-Lemma find_decision_decomp: forall (m: PA Ann) (f: CNF) (l: Lit), 
+Lemma find_decision_decomp: forall (m: PA) (f: CNF) (l: Lit), 
   find_decision m f = Some l -> exists (c: Clause), find_undef_l m c = Some l /\ In c f.
 Proof.
   intros. funelim (find_decision m f).
@@ -410,14 +407,14 @@ Proof.
     + right. assumption.
 Qed.
 
-Lemma find_unit_l_l_in_c: forall (m: PA Ann) (c: Clause) (l: Lit),
+Lemma find_unit_l_l_in_c: forall (m: PA) (c: Clause) (l: Lit),
   find_unit_l m c = Some l -> In l c.
 Proof.
   intros. funelim (find_unit_l m c). rewrite H in Heqcall. 
   apply find_some in Heqcall. destruct Heqcall. assumption.
 Qed.
 
-Lemma find_unit_l_in_c: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+Lemma find_unit_l_in_c: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   find_unit m f = Some (c, l) -> In l c.
 Proof. 
   intros. funelim (find_unit m f).
@@ -428,7 +425,7 @@ Proof.
   - apply H. congruence.
 Qed.
 
-Lemma find_unit_c_in_f: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+Lemma find_unit_c_in_f: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   find_unit m f = Some (c, l) -> In c f.
 Proof. 
   intros. funelim (find_unit m f).
@@ -438,7 +435,7 @@ Proof.
   - right. apply (H c0 l). congruence.
 Qed.
 
-Lemma find_unit_conflicting: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+Lemma find_unit_conflicting: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   find_unit m f = Some (c, l) -> Conflicting m (l_remove c l).
 Proof.
   unfold Conflicting. intros. funelim (find_unit m f).
@@ -453,7 +450,7 @@ Proof.
   - apply H. congruence.
 Qed.
 
-Lemma c_eval_none__l_eval_none: forall (m: PA Ann) (c: Clause), 
+Lemma c_eval_none__l_eval_none: forall (m: PA) (c: Clause), 
   c_eval m c = None -> exists (l: Lit), In l c /\ l_eval m l = None.
 Proof. 
   induction c. intros.
@@ -471,7 +468,7 @@ Proof.
       * assumption.
 Qed.
 
-Lemma c_eval_false__l_eval_false: forall (m: PA Ann) (c: Clause),
+Lemma c_eval_false__l_eval_false: forall (m: PA) (c: Clause),
   c_eval m c = Some false -> forall (l: Lit), In l c -> l_eval m l = Some false.
 Proof. 
   induction c.
@@ -491,7 +488,7 @@ Proof.
       * discriminate.
 Qed.
 
-Lemma undef_remove_false__undef: forall (m: PA Ann) (c: Clause) (l: Lit),
+Lemma undef_remove_false__undef: forall (m: PA) (c: Clause) (l: Lit),
   c_eval m c = None -> c_eval m (l_remove c l) = Some false -> Undef m l.
 Proof.
   unfold Undef. intros. 
@@ -506,7 +503,7 @@ Proof.
     + apply H4 in H5. congruence. 
 Qed.
 
-Lemma find_unit_undef: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+Lemma find_unit_undef: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   find_unit m f = Some (c, l) -> Undef m l.
 Proof.
   unfold Undef. intros. funelim (find_unit m f).
@@ -521,7 +518,7 @@ Proof.
   - apply (H c0 l). congruence.
 Qed.
 
-Lemma app_cancel: forall (m n: PA Ann), m ++a n = m -> n = [].
+Lemma app_cancel: forall (m n: PA), m ++a n = m -> n = [].
 Proof.
   induction m.
   - intros. rewrite app_nil_r in H. assumption.
@@ -565,7 +562,7 @@ Proof.
         -- discriminate.
 Qed.
 
-Lemma find_conflict_exists: forall (m: PA Ann) (f: CNF) (c: Clause),
+Lemma find_conflict_exists: forall (m: PA) (f: CNF) (c: Clause),
   In c f -> Conflicting m c -> exists (c': Clause), find_conflict m f = Some c'.
 Proof.
   unfold Conflicting. intros m f c Hin Hc. destruct (find_conflict m f) as [c'|] eqn:Hfind.
@@ -574,7 +571,7 @@ Proof.
     simp is_conflict in contra. rewrite Hc in contra. simpl in contra. discriminate.
 Qed.
 
-Lemma find_undef_l_exists : forall (m: PA Ann) (c: Clause) (l: Lit),
+Lemma find_undef_l_exists : forall (m: PA) (c: Clause) (l: Lit),
   In l c -> Undef m l -> exists (l': Lit), find_undef_l m c = Some l'.
 Proof.
   unfold Undef. intros. destruct (find_undef_l m c) eqn:G.
@@ -583,7 +580,7 @@ Proof.
     simp is_undefined_l in H. rewrite H0 in H. discriminate.
 Qed.
 
-Lemma find_decision_exists: forall (m: PA Ann) (f: CNF) (c: Clause) (l: Lit),
+Lemma find_decision_exists: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   In l c -> In c f -> Undef m l -> exists (l': Lit), find_decision m f = Some l'.
 Proof. 
   intros. funelim (find_decision m f).
@@ -593,7 +590,7 @@ Proof.
     destruct (find_undef_l_exists m c0 l H H1). congruence.
 Qed.
 
-Lemma undef__neg_undef: forall (m: PA Ann) (l: Lit), Undef m l <-> Undef m (neg l).
+Lemma undef__neg_undef: forall (m: PA) (l: Lit), Undef m l <-> Undef m (neg l).
 Proof.
   unfold Undef. intros. funelim (l_eval m l).
   - intuition.
@@ -705,25 +702,25 @@ Equations max_lit (s: State): nat :=
 max_lit fail        := 0;
 max_lit (state _ f) := max_lit_f f. 
 
-Equations score_aux (m: PA Ann) (n x: nat): list nat :=
+Equations score_aux (m: PA) (n x: nat): list nat :=
 score_aux []        n x := [n - x];
 score_aux (m ++p l) n x := score_aux m n (S x);
 score_aux (m ++d l) n x := n - x :: score_aux m n 0.
 
-Equations score (m: PA Ann) (f: CNF): list nat :=
+Equations score (m: PA) (f: CNF): list nat :=
 score m f := rev (score_aux m (max_lit_f f) 0).
 
-Equations score_total (m: PA Ann) (f: CNF): nat :=
+Equations score_total (m: PA) (f: CNF): nat :=
 score_total m f := (max_lit_f f) - length m.
 
-Definition NoDuplicates (m: PA Ann): Prop := 
+Definition NoDuplicates (m: PA): Prop := 
   NoDup (map l_extract (map fst m)).
 
-Definition Bounded (m: PA Ann) (f: CNF): Prop := 
+Definition Bounded (m: PA) (f: CNF): Prop := 
   forall (l: Lit), In l (map fst m) -> 
   exists (c: Clause), In c f -> In l c \/ In (neg l) c.
 
-Definition Clean (m: PA Ann) (f: CNF): Prop :=
+Definition Clean (m: PA) (f: CNF): Prop :=
   NoDuplicates m /\ Bounded m f.
 
 Equations l_in_c (l: Lit) (f: Clause): bool :=
@@ -732,11 +729,11 @@ l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
 Equations l_in_f (l: Lit) (f: CNF): bool :=
 l_in_f l f := existsb (l_in_c l) f.
 
-Equations neqb_of (eq: Lit * Ann -> Lit * Ann -> bool) (l l': Lit * Ann): bool :=
+Equations neqb_of (eq: Lit * bool -> Lit * bool -> bool) (l l': Lit * bool): bool :=
 neqb_of eq a b := negb (eq a b).
 
-Equations dedupe_by (eq: Lit * Ann -> Lit * Ann -> bool) (m: list (Lit * Ann)): 
-  list (Lit * Ann) by wf (length m) lt :=
+Equations dedupe_by (eq: Lit * bool -> Lit * bool -> bool) (m: list (Lit * bool)): 
+  list (Lit * bool) by wf (length m) lt :=
 dedupe_by eq []       := [];
 dedupe_by eq (l :: m) := l :: dedupe_by eq (filter (neqb_of eq l) m).
 Next Obligation.
@@ -745,10 +742,10 @@ Next Obligation.
   - auto with arith.
 Qed.
 
-Equations eqb_by_atom (la la': Lit * Ann): bool :=
+Equations eqb_by_atom (la la': Lit * bool): bool :=
 eqb_by_atom (l, _) (l', _) := (l =? l') || (l =? neg l'). 
 
-Equations is_bounded (f: CNF) (la: Lit * Ann): bool :=
+Equations is_bounded (f: CNF) (la: Lit * bool): bool :=
 is_bounded f (l, _) := l_in_f l f.
 
 Equations clean (s: State): State :=
@@ -759,7 +756,7 @@ clean (state m f) :=
   state deduped f.
 
 Inductive FailLt: relation State :=
-| f_fail (m: PA Ann) (f: CNF):
+| f_fail (m: PA) (f: CNF):
   FailLt fail (state m f).
 
 Lemma wf_fail_lt: well_founded FailLt.
@@ -1012,14 +1009,14 @@ Proof.
         rewrite Nat.eqb_refl. simpl. apply orb_true_r.
 Qed.
 
-Lemma clean_same_formula: forall (m m': PA Ann) (f f': CNF),
+Lemma clean_same_formula: forall (m m': PA) (f f': CNF),
   clean (state m f) = state m' f' -> f = f'.
 Proof. intros. simp clean in H. simpl in H. injection H as _ <-. reflexivity. Qed.
 
-Lemma next_state_options: forall (m: PA Ann) (f: CNF),
+Lemma next_state_options: forall (m: PA) (f: CNF),
   next_state (state m f) = None \/
   next_state (state m f) = Some fail \/ 
-  exists m': PA Ann, next_state (state m f) = Some (state m' f).
+  exists m': PA, next_state (state m f) = Some (state m' f).
 Proof.
   intros. funelim (next_state (state m f)).
   - left. reflexivity.
@@ -1044,7 +1041,7 @@ Proof.
     + apply eqb_lit_refl.
 Qed.
 
-Lemma undef__no_dupes: forall (m: PA Ann) (l: Lit) (b: bool), 
+Lemma undef__no_dupes: forall (m: PA) (l: Lit) (b: bool), 
   Undef m l -> forallb (neqb_of eqb_by_atom (l, b)) m = true.
 Proof.
   unfold Undef. induction m.
@@ -1062,7 +1059,7 @@ Proof.
       * simp l_eval in H. rewrite G1, G2 in H. simpl in H. assumption.
 Qed.
 
-Lemma dedupe_prop: forall (m: PA Ann) (l: Lit), 
+Lemma dedupe_prop: forall (m: PA) (l: Lit), 
   Undef m l -> dedupe_by eqb_by_atom (m ++p l) = dedupe_by eqb_by_atom m ++p l.
 Proof.
   intros. funelim (dedupe_by eqb_by_atom m).
@@ -1071,7 +1068,7 @@ Proof.
     apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
 Qed.
 
-Lemma dedupe_dec: forall (m: PA Ann) (l: Lit), 
+Lemma dedupe_dec: forall (m: PA) (l: Lit), 
   Undef m l -> dedupe_by eqb_by_atom (m ++d l) = dedupe_by eqb_by_atom m ++d l.
 Proof.
   intros. funelim (dedupe_by eqb_by_atom m).
@@ -1080,31 +1077,31 @@ Proof.
     apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
 Qed.
 
-Lemma l_eval_some_in: forall (m: PA Ann) (l: Lit) (b: bool), 
+Lemma l_eval_some_in: forall (m: PA) (l: Lit) (b: bool), 
   l_eval m l = Some b -> exists (b': bool), In (l, b') m \/ In (neg l, b') m.
 Proof. 
   intros. funelim (l_eval m l).
   - congruence.
-  - rewrite eqb_lit_eq in Heq. subst l'. exists a. left. now left.
-  - rewrite eqb_lit_eq in Heq. subst. exists a. right. rewrite neg_involutive. now left.
+  - rewrite eqb_lit_eq in Heq. subst l'. exists b. left. now left.
+  - rewrite eqb_lit_eq in Heq. subst. exists b. right. rewrite neg_involutive. now left.
   - rewrite H0 in Heqcall. apply H in Heqcall; auto. destruct Heqcall. destruct H1.
     + exists x. left. now right.
     + exists x. right. now right.
 Qed.
 
-Lemma in_l_eval_some: forall (m: PA Ann) (l: Lit) (b: bool), 
+Lemma in_l_eval_some: forall (m: PA) (l: Lit) (b: bool), 
   In (l, b) m -> exists (b': bool), l_eval m l = Some b'.
 Proof.
   intros. funelim (l_eval m l).
   - contradiction.
   - now exists true.
   - now exists false.
-  - apply (H b). inversion H0.
+  - apply (H b0). inversion H0.
     + injection H1 as <- <-. rewrite eqb_lit_refl in Heq0. discriminate.
     + assumption. 
 Qed.
 
-Lemma l_eval_some_neg: forall (m: PA Ann) (l: Lit) (b: bool),
+Lemma l_eval_some_neg: forall (m: PA) (l: Lit) (b: bool),
   l_eval m l = Some b <-> l_eval m (neg l) = Some (negb b).
 Proof.
   intros. funelim (l_eval m l).
@@ -1116,14 +1113,14 @@ Proof.
       simp l_eval. rewrite eqb_lit_refl. rewrite eqb_lit_sym. rewrite neg_neqb. simpl. reflexivity.
     + intros. rewrite eqb_lit_eq in Heq. subst l'. simp l_eval in H.
       rewrite eqb_lit_refl in H. rewrite eqb_lit_sym in H. rewrite neg_neqb in H. simpl in H.
-      injection H as H. destruct b; easy.
+      injection H as H. destruct b0; easy.
   - split.
     + intros. rewrite eqb_lit_eq in Heq. subst. rewrite neg_involutive.
       simp l_eval. rewrite eqb_lit_refl. rewrite neg_neqb. simpl. f_equal.
       injection H as <-. reflexivity.
     + intros. f_equal. rewrite eqb_lit_eq in Heq. subst. rewrite neg_involutive in H.
       simp l_eval in H. rewrite neg_neqb in H. rewrite eqb_lit_refl in H. simpl in H.
-      injection H as H. destruct b; auto.
+      injection H as H. destruct b0; auto.
   - split.
     + intros. simp l_eval. rewrite <- eqb_lit_neg_compat. rewrite Heq0. 
       rewrite eqb_lit_neg_compat. rewrite neg_involutive. rewrite Heq. simpl.
@@ -1133,7 +1130,7 @@ Proof.
       simpl in H0. apply H. assumption.
 Qed.
 
-Lemma undef__filter_undef: forall (m: PA Ann) (l: Lit) (test: Lit * Ann -> bool),
+Lemma undef__filter_undef: forall (m: PA) (l: Lit) (test: Lit * bool -> bool),
   Undef m l -> Undef (filter test m) l.
 Proof.
   unfold Undef. intros. pose proof (incl_filter test m). unfold incl in H0.
@@ -1170,10 +1167,10 @@ Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
 
 Theorem final_exists: forall (f: CNF),
   (state [] f ==>* fail /\ Final fail) \/
-  (exists (m: PA Ann), state [] f ==>* state m f /\ Final (state m f)).
+  (exists (m: PA), state [] f ==>* state m f /\ Final (state m f)).
 Admitted.
 
-Theorem final_sat_refl: forall (f: CNF) (m: PA Ann),
+Theorem final_sat_refl: forall (f: CNF) (m: PA),
   state [] f ==>* state m f /\ Final (state m f) <-> Sat f.
 Admitted.
 
