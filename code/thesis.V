@@ -873,19 +873,10 @@ Proof.
       * constructor; intros ? [].
 Qed.
 
-Lemma wf_equiv: forall (A : Type) (R S: A -> A -> Prop),
-  (forall a b, R a b <-> S a b) ->
-  well_founded R ->
-  well_founded S.
-Proof.
-  unfold well_founded. intros A R S HRS Hwf_R a. specialize (Hwf_R a). 
-  induction Hwf_R as [a _ IHS]. constructor. intros b HS. apply IHS. now apply HRS.
-Qed.
-
 Lemma wf_prefix_lt: forall x, well_founded (PrefixLt x).
 Proof.
-  intro x. apply (wf_equiv (list nat) (bcll x) (PrefixLt x)).
-  - apply bcll__prefix_lt.
+  intro x. apply (wf_incl _ _ (bcll x)).
+  - unfold inclusion. now apply bcll__prefix_lt.
   - apply wf_bcll.
 Qed.
 
