@@ -1164,15 +1164,24 @@ Proof.
 Admitted.
 
 Lemma next_state__state_lt: forall (m: PA) (f: CNF) (s': State), 
-  next_state (state m f) = Some s' -> (state m f) >>[f] s'.
+  next_state (state m f) = Some s' -> state m f >>[f] s'.
 Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
 
-Lemma trans_same_formula: forall (m: PA) (f f': CNF), state [] f ==>* state m f' -> f = f'.
-Proof. 
-  intros. inversion H.
-  - inversion H0; easy.
-  - reflexivity.
-  - admit.
+Lemma trans_same_formula: forall (m m': PA) (f f': CNF), state m f ==> state m' f' -> f = f'.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF), state m f ==>* state m' f' -> f = f'.
+Proof.
+  intros.
+  remember (state m f) as s eqn:Heqs.
+  remember (state m' f') as s' eqn:Heqs'.
+  generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
+  induction H.
+  - intros. subst. now apply trans_same_formula in H.
+  - intros. congruence.
+  - intros. subst. destruct y.
+    + admit.
+    + admit.
 Admitted.
 
 Lemma initial_refl: forall (f: CNF), state [] f ==>* state [] f.
@@ -1201,7 +1210,7 @@ Section solve.
         * apply (rt_trans _ _ _ (state m f0)).
           -- assumption.
           -- now apply rt_step.
-        * apply trans_same_formula in H0. subst f0. now apply trans__state_lt.
+        * apply trans_clos_same_formula in H0. subst f0. now apply trans__state_lt.
   Qed.
 
   Definition solve: State := solve_aux (state [] f) (initial_refl f).
