@@ -1172,17 +1172,17 @@ Proof. intros. inversion H; subst; reflexivity. Qed.
 
 Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF), state m f ==>* state m' f' -> f = f'.
 Proof.
-  intros.
+  intros. apply clos_rt_rtn1_iff in H. 
   remember (state m f) as s eqn:Heqs.
   remember (state m' f') as s' eqn:Heqs'.
   generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
   induction H.
-  - intros. subst. now apply trans_same_formula in H.
   - intros. congruence.
-  - intros. subst. destruct y.
-    + admit.
-    + admit.
-Admitted.
+  - intros. destruct y, z; try congruence.
+    + inversion H.
+    + subst. injection Heqs' as Heqs'. subst. apply trans_same_formula in H. subst.
+      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m). reflexivity. reflexivity.
+Qed.
 
 Lemma initial_refl: forall (f: CNF), state [] f ==>* state [] f.
 Proof. intros. apply rt_refl. Qed.
