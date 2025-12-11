@@ -1263,7 +1263,7 @@ Lemma total_dec: forall (m: PA) (f: CNF) (l: Lit),
   Undef m l ->
   Bounded m f ->
   NoDuplicates m ->
-  max_lit_f f - length (m ++d l) < max_lit_f f - length m.
+  TotalLt (max_lit_f f - length (m ++d l)) (max_lit_f f - length m).
 Admitted.
 
 Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State), state m f ==> s' -> state m f >>[f] s'.
@@ -1308,8 +1308,7 @@ Proof.
            pose proof (undef__clean_undef m m' f f' l_decide Hundef Hsc) as Hundef'.
            pose proof (clean__bounded m m' f f' Hsc) as Hm_bounded.
            pose proof (clean__no_duplicates m m' f f' Hsc) as Hno_dup.
-           simp clean in Hsc. simpl in Hsc. injection Hsc as -> ->.
-           simp score_total. unfold TotalLt.
+           simp clean in Hsc. simpl in Hsc. injection Hsc as -> ->. simp score_total.
            clear Hx_in_c Hc_in_f Hundef c_decide.
            apply total_dec; assumption.
       * now apply undef__filter_undef.
