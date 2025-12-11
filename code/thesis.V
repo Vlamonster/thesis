@@ -1220,7 +1220,12 @@ Proof.
     simp clean. simpl. constructor.
   (* t_unit *)
   - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. right.
-    unfold MR. simp clean. simpl. simp state_measure. apply left_slex. admit.
+    unfold MR. simp clean. simpl. simp state_measure. apply left_slex.
+    destruct (is_bounded f (l, false)) eqn:G.
+    + rewrite dedupe_prop.
+      * admit.
+      * now apply undef__filter_undef.
+    + simp is_bounded in G. pose proof (l_in_c__c_in_f__l_in_f f c l H2 H3). congruence.
   (* t_decide *)
   - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. right.
     unfold MR. simp clean. simpl. simp state_measure. admit.
