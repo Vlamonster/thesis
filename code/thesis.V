@@ -398,16 +398,9 @@ Proof.
     + reflexivity.
 Qed.
 
+(* This lemma actually is not true, NoDecisions is not strong enough. *)
 Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decision m = None.
-Proof.
-  intros. funelim (split_last_decision m).
-  - reflexivity.
-  - exfalso. apply H. exists l. simp l_ann.
-    rewrite eqb_lit_refl. reflexivity.
-  - destruct (split_last_decision m) as [[m_split l_split]|] eqn:G.
-    + admit.
-    + reflexivity.
-Admitted.
+Proof. Admitted.
 
 Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
