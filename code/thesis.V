@@ -157,7 +157,7 @@ Inductive State: Type :=
 | fail
 | state (m: PA) (f: CNF).
 
-Definition NoDecisions (m: PA): Prop := ~ exists (l: Lit), l_ann m l = Some true.
+Definition NoDecisions (m: PA): Prop := ~ exists (la: Lit * bool), In la m /\ snd la = true.
 
 Definition Conflicting (m: PA) (c: Clause): Prop := c_eval m c = Some false.
 
@@ -205,8 +205,9 @@ Module TransExamples.
     apply (t_fail _ _ [Neg 1]).
     - right. now left.
     - reflexivity.
-    - unfold NoDecisions, not. intros [l H]. simp neg l_ann in H.
-      now destruct (l =? Pos 1), (l =? Neg 1).
+    - unfold NoDecisions, not. intros [[l [|]] [H1 H2]].
+      + destruct H1. discriminate. destruct H.
+      + destruct H1. discriminate. destruct H.
   Qed.
 
   Example unit_prop: 
@@ -347,14 +348,14 @@ Proof.
   - discriminate.
   - rewrite <- Heqcall in H. injection H as H. subst. exists []. split.
     + reflexivity.
-    + intros. destruct H. discriminate.
+    + intros. destruct H. destruct H. destruct H.
   - rewrite <- Heqcall in H0. destruct (H m' l' H0). destruct H1. rewrite H1. exists (x ++p l). split.
     + reflexivity.
-    + intros. apply H2. destruct H3. exists x0. simp l_ann in H3. destruct (x0 =? neg l), (x0 =? l).
-      * simpl in H3. discriminate.
-      * simpl in H3. discriminate.
-      * simpl in H3. discriminate.
-      * simpl in H3. assumption.
+    + intros. apply H2. destruct H3. destruct H3. exists x0. split.
+      * destruct H3. 
+        -- rewrite <- H3 in H4. discriminate.
+        -- assumption.
+      * assumption.
 Qed.
 
 Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
@@ -385,15 +386,15 @@ Qed.
 Lemma no_split__no_decision: forall (m: PA), split_last_decision m = None -> NoDecisions m.
 Proof. 
   unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
-  - destruct H0. discriminate.
+  - destruct H0. destruct H0. destruct H0.
   - discriminate.
-  - destruct H1. apply (H m).
+  - destruct H1. destruct H1. apply (H m).
     + assumption.
-    + destruct (x =? l) eqn:G1, (x =? neg l) eqn:G2.
-      * apply eqb_lit_eq in G1. subst. rewrite l_ann_prop_eq in H1. discriminate.
-      * apply eqb_lit_eq in G1. subst. rewrite l_ann_prop_eq in H1. discriminate.
-      * apply eqb_lit_eq in G2. subst. rewrite l_ann_prop_eq_neg in H1. discriminate.
-      * exists x. rewrite eqb_lit_neq in G1, G2. rewrite <- (l_ann_prop_neq m _ _ (conj G1 G2)). assumption.
+    + exists x. split.
+      * destruct H1.
+        -- rewrite <- H1 in H2. discriminate.
+        -- assumption.
+      * assumption.
     + reflexivity.
     + reflexivity.
 Qed.
