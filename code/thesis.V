@@ -182,9 +182,11 @@ Inductive Trans: relation State :=
   Undef m l ->
   Trans (state m f) (state (m ++d l) f)
 (* Backtrack by flipping the most recent decision literal. *)
-| t_backtrack (m n: PA) (f: CNF) (c: Clause) (l: Lit):
+| t_backtrack (m n: PA) (f: CNF) (c c': Clause) (l: Lit):
+  In l c \/ In (neg l) c ->
   In c f ->
-  Conflicting (m ++d l ++a n) c ->
+  In c' f ->
+  Conflicting (m ++d l ++a n) c' ->
   NoDecisions n ->
   Trans (state (m ++d l ++a n) f) (state (m ++p neg l) f).
 
@@ -241,7 +243,9 @@ Module TransExamples.
     (state [(Pos 1, true)] [[Pos 1];[Neg 1]]) ==>
     (state [(Neg 1, false)] [[Pos 1];[Neg 1]]).
   Proof.
-    apply (t_backtrack [] [] _ [Neg 1] (Pos 1)).
+    apply (t_backtrack [] [] _ [Pos 1] [Neg 1] (Pos 1)).
+    - left. now left.
+    - now left.
     - right. now left.
     - reflexivity.
     - unfold NoDecisions, not. now intros [? ?].
@@ -293,6 +297,12 @@ find_decision m (c :: f) with find_undef_l m c, find_decision m f :=
   | Some l, _ := Some l
   | _     , r := r.
 
+Equations l_in_c (l: Lit) (f: Clause): bool :=
+l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
+
+Equations l_in_f (l: Lit) (f: CNF): bool :=
+l_in_f l f := existsb (l_in_c l) f.
+
 Equations next_state (s: State): option State :=
 next_state fail := None;
 next_state (state m f) :=
@@ -301,7 +311,18 @@ next_state (state m f) :=
   (* t_fail *)
   | Some c, None => Some fail
   (* t_backtrack *)
-  | Some c, Some (m', l) => Some (state (m' ++p neg l) f)
+  | Some c, Some (m', l) => 
+    if l_in_f l f then Some (state (m' ++p neg l) f)
+    else
+    (* t_unit *)
+    match find_unit m f with
+    | Some (c, l) => Some (state (m ++p l) f)
+    | None        =>
+    (* t_decide *)
+    match find_decision m f with
+    | Some l => Some (state (m ++d l) f)
+    | None   => None
+    end end
   | _     , _    =>
   (* t_unit *)
   match find_unit m f with
@@ -334,7 +355,7 @@ Proof.
       * simpl in H3. discriminate.
       * simpl in H3. discriminate.
       * simpl in H3. assumption.
-Qed. 
+Qed.
 
 Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
 Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
@@ -376,6 +397,17 @@ Proof.
     + reflexivity.
     + reflexivity.
 Qed.
+
+Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decision m = None.
+Proof.
+  intros. funelim (split_last_decision m).
+  - reflexivity.
+  - exfalso. apply H. exists l. simp l_ann.
+    rewrite eqb_lit_refl. reflexivity.
+  - destruct (split_last_decision m) as [[m_split l_split]|] eqn:G.
+    + admit.
+    + reflexivity.
+Admitted.
 
 Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
@@ -530,13 +562,36 @@ Proof.
   - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
     + destruct (split_last_decision m) as [(m_split, l_split)|] eqn:split_last_decision.
       (* t_backtrack *)
-      * injection Heqcall as Heqcall. rewrite Heqcall. 
-        pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
-        destruct decomp as [n_split [decomp no_dec]]. rewrite decomp.
-        apply (t_backtrack m_split n_split f c_conflict l_split).
-        -- apply (find_conflict_c_in_f m f c_conflict). assumption.
-        -- rewrite <- decomp. apply (find_conflict_conflicting m f c_conflict). assumption.
-        -- assumption.
+      * destruct (l_in_f l_split f) eqn:Hl_in_f.
+        -- injection Heqcall as Heqcall. rewrite Heqcall. 
+          pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
+          destruct decomp as [n_split [decomp no_dec]]. rewrite decomp.
+          simp l_in_f in Hl_in_f. apply existsb_exists in Hl_in_f as [c_decide [Hc_in_f Hx_in_c]].
+          apply (t_backtrack m_split n_split f c_decide c_conflict l_split).
+          ++ simp l_in_c in Hx_in_c. apply orb_true_iff in Hx_in_c as [Hl_in_c|Hnegl_in_c].
+            ** left. apply existsb_exists in Hl_in_c as [l_decide [Hl_in_c Heq]]. 
+               apply eqb_lit_eq in Heq. congruence.
+            ** right. apply existsb_exists in Hnegl_in_c as [l_decide [Hnegl_in_c Heq]].
+               apply eqb_lit_eq in Heq. congruence.
+          ++ assumption.
+          ++ apply (find_conflict_c_in_f m f c_conflict). assumption.
+          ++ rewrite <- decomp. apply (find_conflict_conflicting m f c_conflict). assumption.
+          ++ assumption.
+        -- destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
+          (* t_unit *)
+          ++ injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
+            ** apply (find_unit_l_in_c m f c_unit l_unit). assumption.
+            ** apply (find_unit_c_in_f m f c_unit l_unit). assumption.
+            ** apply (find_unit_conflicting m f c_unit l_unit). assumption.
+            ** apply (find_unit_undef m f c_unit l_unit). assumption.
+          ++ destruct (find_decision m f) as [l_decide|] eqn:find_decision.
+            ** injection Heqcall as Heqcall. rewrite Heqcall.
+               destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
+               apply (t_decide m f c_decide l_decide).
+              --- left. apply (find_undef_l_in_c m c_decide l_decide). assumption.
+              --- assumption.
+              --- apply (find_undef_l_undef m c_decide l_decide). assumption.
+            ** discriminate.
       (* t_fail *)
       * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
         -- apply (find_conflict_c_in_f m f c_conflict). assumption.
@@ -608,6 +663,16 @@ Proof.
       apply H1. apply H.
 Qed.
 
+Lemma l_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
+  In l c -> In c f -> l_in_f l f = true.
+Proof. 
+  intros. simp l_in_f. rewrite existsb_exists. exists c. split.
+  - assumption.
+  - simp l_in_c. rewrite orb_true_iff. left. rewrite existsb_exists. exists l. split.
+    + assumption.
+    + apply eqb_lit_refl.
+Qed.
+
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
 Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
 Proof.
@@ -616,7 +681,7 @@ Proof.
       m f c_conflict Hc_in_f Hconflict Hno_dec |
       m f c_unit l_unit Hl_in_c Hc_in_f Hconflict Hundef |
       m f c_decide l_decide Hx_in_c Hc_in_f Hundef |
-      m_split n_split f c_conflict l_split Hc_in_f Hconflict Hno_dec
+      m_split n_split f c_decide c_conflict l_split Hx_in_c Hc_in_f Hc'_in_f Hconflict Hno_dec
     ]; subst s s'.
   (* t_fail *)
   - funelim (next_state (state m f)).
@@ -624,7 +689,13 @@ Proof.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst. 
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
       * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
-        -- now exists (state (m_split ++p neg l_split) f).
+        -- destruct (l_in_f l_split f) eqn:Hl_in_f.
+          ++ now exists (state (m_split ++p neg l_split) f).
+          ++ destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:Hfind_unit.
+            ** now exists (state (m ++p l_unit) f).
+            ** destruct (find_decision m f) as [l_decide|] eqn:Hfind_dec.
+              --- now exists (state (m ++d l_decide) f).
+              --- now rewrite (no_decision__no_split m Hno_dec) in Hsplit.
         -- now exists fail.
       * destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
   (* t_unit *)
@@ -633,7 +704,13 @@ Proof.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
       * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
-        -- now exists (state (m_split ++p neg l_split) f).
+        -- destruct (l_in_f l_split f) eqn:Hl_in_f. 
+          ++ now exists (state (m_split ++p neg l_split) f).
+          ++ destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+            ** now exists (state (m ++p l_unit') f).
+            ** destruct (find_decision m f) as [l_decide|] eqn:Hfind_dec.
+              --- now exists (state (m ++d l_decide) f).
+              --- destruct (find_decision_exists m f c_unit l_unit Hl_in_c Hc_in_f Hundef). congruence.
         -- now exists fail.
       * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
         -- now exists (state (m ++p l_unit') f).
@@ -646,7 +723,16 @@ Proof.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
       * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
-        -- now exists (state (m_split ++p neg l_split) f).
+        -- destruct (l_in_f l_split f) eqn:Hl_in_f.
+          ++ now exists (state (m_split ++p neg l_split) f).
+          ++ destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+            ** now exists (state (m ++p l_unit') f).
+            ** destruct (find_decision m f) as [l_decide'|] eqn:Hfind_dec.
+              --- now exists (state (m ++d l_decide') f).
+              --- destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
+                +++ destruct (find_decision_exists m f c_decide l_decide Hl_in_c Hc_in_f Hundef). congruence.
+                +++ apply undef__neg_undef in Hundef.
+                    destruct (find_decision_exists m f c_decide (neg l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
         -- now exists fail.
       * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
         -- now exists (state (m ++p l_unit') f).
@@ -662,14 +748,20 @@ Proof.
     + injection eqargs as eqargs. symmetry in eqargs, H0. subst.
       destruct (find_conflict (m_split ++d l_split ++a n_split) f) as [c_conflict'|] eqn:Hfind_conflict.
       * destruct (split_last_decision (m_split ++d l_split ++a n_split)) as [(m_split', l_split')|] eqn:Hsplit.
-        -- now exists (state (m_split' ++p neg l_split') f).
+        -- destruct (l_in_f l_split' f) eqn:Hl_in_f. 
+          ++ now exists (state (m_split' ++p neg l_split') f).
+          ++ destruct (find_unit (m_split ++d l_split ++a n_split) f) as [(c_unit, l_unit)|] eqn:Hfind_unit.
+            ** now exists (state (m_split ++d l_split ++a n_split ++p l_unit) f).
+            ** destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide|] eqn:Hfind_dec.
+              --- now exists (state (m_split ++d l_split ++a n_split ++d l_decide) f).
+              --- admit. (* Hsplit implies l_split' = l_split, which contradicts Hl_in_f. *)
         -- now exists fail.
       * destruct (find_unit (m_split ++d l_split ++a n_split) f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
         -- now exists (state (m_split ++d l_split ++a n_split ++p l_unit') f).
         -- destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide'|] eqn:Hfind_dec.
           ++ now exists (state (m_split ++d l_split ++a n_split ++d l_decide') f).
-          ++ destruct (find_conflict_exists (m_split ++d l_split ++a n_split) f c_conflict Hc_in_f Hconflict). congruence.
-Qed.
+          ++ destruct (find_conflict_exists (m_split ++d l_split ++a n_split) f c_conflict Hc'_in_f Hconflict). congruence.
+Admitted.
 
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
 Proof.
@@ -725,12 +817,6 @@ Definition Bounded (m: PA) (f: CNF): Prop :=
 
 Definition Clean (m: PA) (f: CNF): Prop :=
   NoDuplicates m /\ Bounded m f.
-
-Equations l_in_c (l: Lit) (f: Clause): bool :=
-l_in_c l c := existsb (eqb_lit l) c || existsb (eqb_lit (neg l)) c.
-
-Equations l_in_f (l: Lit) (f: CNF): bool :=
-l_in_f l f := existsb (l_in_c l) f.
 
 (* The following has to be wrapped in a section due to a bug in Equations. *)
 Section dedupe_by.
@@ -1097,23 +1183,19 @@ Proof.
   - left. reflexivity.
   - injection eqargs as eqargs. subst m0 f0. rewrite Heqcall. destruct (find_conflict m f).
     + destruct (split_last_decision m).
-      * destruct p. right. right. now exists (p ++p neg l).
+      * destruct p. destruct (l_in_f l f).
+        -- right. right. now exists (p ++p neg l).
+        -- destruct (find_unit m f).
+          ++ destruct p0. right. right. now exists (m ++p l0).
+          ++ destruct (find_decision m f).
+            ** right. right. now exists (m ++d l0).
+            ** now left.
       * right. now left.
     + destruct (find_unit m f).
       * destruct p. right. right. now exists (m ++p l).
       * destruct (find_decision m f).
         -- right. right. now exists (m ++d l).
         -- now left.
-Qed.
-
-Lemma l_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
-  In l c -> In c f -> l_in_f l f = true.
-Proof. 
-  intros. simp l_in_f. rewrite existsb_exists. exists c. split.
-  - assumption.
-  - simp l_in_c. rewrite orb_true_iff. left. rewrite existsb_exists. exists l. split.
-    + assumption.
-    + apply eqb_lit_refl.
 Qed.
 
 Lemma negl_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
