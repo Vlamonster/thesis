@@ -675,6 +675,50 @@ Proof.
     + apply eqb_lit_refl.
 Qed.
 
+Lemma bla: forall (m m' n: PA) (l l': Lit),
+  NoDecisions n -> split_last_decision (m ++d l ++a n) = Some (m', l') -> l = l'.
+Proof. 
+  unfold NoDecisions. unfold not. intros. funelim (split_last_decision (m ++d l ++a n)).
+  - congruence.
+  - rewrite H0 in Heqcall. injection Heqcall as <- <-. destruct n.
+    + rewrite app_nil_l in eqargs. now injection eqargs as <-.
+    + injection eqargs as <-. exfalso. apply H. exists (l, true). split.
+      * now left.
+      * reflexivity.
+  - admit.
+Admitted.
+
+Lemma existsb_false_iff: forall (A: Type) (f: A -> bool) (l : list A),
+  existsb f l = false <-> (forall (x: A), In x l -> f x = false).
+Proof.
+  induction l as [|a l IH]; simpl; intros.
+  - split.
+    + intros. contradiction.
+    + intros. reflexivity.
+  - rewrite orb_false_iff. rewrite IH. split.
+    + intros [Ha Hl] x [Hx | Hx].
+      * now subst.
+      * now apply Hl.
+    + intros. split.
+      * apply H. now left.
+      * intros. apply H. now right.
+Qed.
+
+Lemma l_in_f__neg_l_in_f: forall (f: CNF) (l: Lit), l_in_f l f = l_in_f (neg l) f.
+Proof.
+  intros. destruct (l_in_f l f) eqn:G.
+  - simp l_in_f in *. apply existsb_exists in G as [c [Hc_in_f Hl_in_c]].
+    simp l_in_c in *. apply orb_true_iff in Hl_in_c as [Hl_in_c|Hnegl_in_c].
+    + symmetry. apply existsb_exists. exists c. split.
+      * assumption.
+      * simp l_in_c. apply orb_true_iff. right. now rewrite neg_involutive.
+    + symmetry. apply existsb_exists. exists c. split.
+      * assumption.
+      * simp l_in_c. apply orb_true_iff. now left.
+  - simp l_in_f in *. rewrite existsb_false_iff in G. symmetry. rewrite existsb_false_iff.
+    intros. apply G in H. simp l_in_c in *. rewrite neg_involutive. now rewrite orb_comm.
+Qed.
+
 (* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
 Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
 Proof.
@@ -756,14 +800,19 @@ Proof.
             ** now exists (state (m_split ++d l_split ++a n_split ++p l_unit) f).
             ** destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide|] eqn:Hfind_dec.
               --- now exists (state (m_split ++d l_split ++a n_split ++d l_decide) f).
-              --- admit. (* Hsplit implies l_split' = l_split, which contradicts Hl_in_f. *)
+              --- apply (bla m_split m_split' n_split l_split l_split') in Hno_dec.
+                +++ subst l_split'. destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
+                  *** now rewrite (l_in_c__c_in_f__l_in_f f c_decide l_split Hl_in_c Hc_in_f) in Hl_in_f.
+                  *** rewrite l_in_f__neg_l_in_f in Hl_in_f.
+                      now rewrite (l_in_c__c_in_f__l_in_f f c_decide (neg l_split) Hnegl_in_c Hc_in_f) in Hl_in_f.
+                +++ assumption.
         -- now exists fail.
       * destruct (find_unit (m_split ++d l_split ++a n_split) f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
         -- now exists (state (m_split ++d l_split ++a n_split ++p l_unit') f).
         -- destruct (find_decision (m_split ++d l_split ++a n_split) f) as [l_decide'|] eqn:Hfind_dec.
           ++ now exists (state (m_split ++d l_split ++a n_split ++d l_decide') f).
           ++ destruct (find_conflict_exists (m_split ++d l_split ++a n_split) f c_conflict Hc'_in_f Hconflict). congruence.
-Admitted.
+Qed.
 
 Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
 Proof.
