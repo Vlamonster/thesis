@@ -399,9 +399,17 @@ Proof.
     + reflexivity.
 Qed.
 
-(* This lemma actually is not true, NoDecisions is not strong enough. *)
 Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decision m = None.
-Proof. Admitted.
+Proof.
+  unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
+  - reflexivity.
+  - exfalso. apply H. exists (l, true). split.
+    + now left.
+    + reflexivity.
+  - apply H. intros. apply H0. destruct H1. destruct H1. exists x. split.
+    + now right.
+    + assumption. 
+Qed.
 
 Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
