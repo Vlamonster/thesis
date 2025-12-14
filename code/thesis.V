@@ -126,9 +126,6 @@ Module Evaluation.
     | _   , true := Some a
     | _   , _    := l_ann m l.
 
-  Equations l_remove (c: Clause) (l: Lit): Clause :=
-  l_remove c l := filter (fun l' => negb (l =? l')) c.
-
   Equations c_eval (m: PA) (c: Clause): option bool :=
   c_eval m [] := Some false;
   c_eval m (l :: c) with l_eval m l, c_eval m c :=
@@ -167,59 +164,60 @@ Module EvalExamples.
   Compute c_eval ([] ++p Pos 2) [Pos 1; Pos 2].
 End EvalExamples.
 
-Definition Total (m: PA) (f: CNF): Prop := forall (l: Lit) (c: Clause), In l c -> In c f -> Def m l.
+Module Trans.
+  (* A state is either the fail state, or a partial assignment with a formula. *)
+  Inductive State: Type :=
+  | fail
+  | state (m: PA) (f: CNF).
 
-Definition Model (m: PA) (f: CNF): Prop := f_eval m f = Some true.
+  (* Propositions used in the transition relation `==>`. *)
+  Definition NoDecisions (m: PA): Prop := ~ exists (la: Lit * Ann), In la m /\ snd la = dec.
+  Definition Conflicting (m: PA) (c: Clause): Prop := c_eval m c = Some false.
 
-Definition Sat (f: CNF): Prop := exists (m: PA), Model m f.
-Definition Unsat (f: CNF): Prop := ~ Sat f.
+  (* Remove a literal from a clause. *)
+  Equations l_remove (c: Clause) (l: Lit): Clause :=
+  l_remove c l := filter (fun (l': Lit) => negb (l =? l')) c.
 
-Definition Entails (f f': CNF): Prop := forall (m: PA), Model m f -> Model m f'.
-Definition Equivalent (f f': CNF): Prop := Entails f f' /\ Entails f' f.
+  Inductive Trans: relation State :=
+  (* Fail if all literals are assigned and there is a conflict. *)
+  | t_fail (m: PA) (f: CNF) (c: Clause):
+    In c f ->
+    Conflicting m c ->
+    NoDecisions m ->
+    Trans (state m f) fail
+  (* If a clause is false except for one unassigned literal, assign it to satisfy the clause. *)
+  | t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit):
+    In l c ->
+    In c f ->
+    Conflicting m (l_remove c l) ->
+    Undef m l ->
+    Trans (state m f) (state (m ++p l) f)
+  (* Arbitrarily set an unassigned literal in the formula to true. *)
+  | t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit):
+    In l c \/ In (¬l) c ->
+    In c f ->
+    Undef m l ->
+    Trans (state m f) (state (m ++d l) f)
+  (* Backtrack by flipping the most recent decision literal. *)
+  | t_backtrack (m n: PA) (f: CNF) (c c': Clause) (l: Lit):
+    In l c \/ In (¬l) c ->
+    In c f ->
+    In c' f ->
+    Conflicting (m ++d l ++a n) c' ->
+    NoDecisions n ->
+    Trans (state (m ++d l ++a n) f) (state (m ++p ¬l) f).
+  
+  (* The following is the reflexive-transitive closure of `==>`. *)
+  Definition TransRTC: relation State := clos_refl_trans State Trans.
 
-Inductive State: Type :=
-| fail
-| state (m: PA) (f: CNF).
+  Declare Scope trans_scope.
+  Infix "==>" := Trans (at level 70): trans_scope.
+  Infix "==>*" := TransRTC (at level 70): trans_scope.
+  Open Scope trans_scope.
 
-Definition NoDecisions (m: PA): Prop := ~ exists (la: Lit * Ann), In la m /\ snd la = dec.
-
-Definition Conflicting (m: PA) (c: Clause): Prop := c_eval m c = Some false.
-
-Inductive Trans: relation State :=
-(* Fail if all literals are assigned and there is a conflict. *)
-| t_fail (m: PA) (f: CNF) (c: Clause):
-  In c f ->
-  Conflicting m c ->
-  NoDecisions m ->
-  Trans (state m f) fail
-(* If a clause is false except for one unassigned literal, assign it to satisfy the clause. *)
-| t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit):
-  In l c ->
-  In c f ->
-  Conflicting m (l_remove c l) ->
-  Undef m l ->
-  Trans (state m f) (state (m ++p l) f)
-(* Arbitrarily set an unassigned literal in the formula to true. *)
-| t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit):
-  In l c \/ In (¬l) c ->
-  In c f ->
-  Undef m l ->
-  Trans (state m f) (state (m ++d l) f)
-(* Backtrack by flipping the most recent decision literal. *)
-| t_backtrack (m n: PA) (f: CNF) (c c': Clause) (l: Lit):
-  In l c \/ In (¬l) c ->
-  In c f ->
-  In c' f ->
-  Conflicting (m ++d l ++a n) c' ->
-  NoDecisions n ->
-  Trans (state (m ++d l ++a n) f) (state (m ++p ¬l) f).
-
-Infix "==>" := Trans (at level 70).
-
-Definition TransRTC: relation State := clos_refl_trans State Trans.
-Infix "==>*" := TransRTC (at level 70).
-
-Definition Final (s: State): Prop := ~ exists (s': State), s ==> s'.
+  (* A state is final if there are no states that follow from it by `==>`. *)
+  Definition Final (s: State): Prop := ~ exists (s': State), s ==> s'.
+End Trans. Import Trans.
 
 Module TransExamples.
   Example dead_end:
@@ -1547,6 +1545,15 @@ Section solve.
 
   Definition solve: State := solve_aux (state [] f) (initial_refl f).
 End solve.
+
+Definition Total (m: PA) (f: CNF): Prop := forall (l: Lit) (c: Clause), In l c -> In c f -> Def m l.
+Definition Model (m: PA) (f: CNF): Prop := f_eval m f = Some true.
+
+Definition Sat (f: CNF): Prop := exists (m: PA), Model m f.
+Definition Unsat (f: CNF): Prop := ~ Sat f.
+
+Definition Entails (f f': CNF): Prop := forall (m: PA), Model m f -> Model m f'.
+Definition Equivalent (f f': CNF): Prop := Entails f f' /\ Entails f' f.
 
 Theorem fail_final: Final fail.
 Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
