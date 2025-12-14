@@ -28,7 +28,7 @@ Proof. apply Nat.eqb_eq. Qed.
 Equations eqb_lit (l1 l2: Lit): bool :=
 eqb_lit (Pos p1) (Pos p2) := eqb_atom p1 p2;
 eqb_lit (Neg p1) (Neg p2) := eqb_atom p1 p2;
-eqb_lit _ _ => false.
+eqb_lit _        _        := false.
 
 Notation "l1 =? l2" := (eqb_lit l1 l2) (at level 70).
 
@@ -77,12 +77,17 @@ Proof. intros. repeat rewrite <- eqb_lit_eq. now rewrite eqb_lit_neg_compat. Qed
 
 Definition Unit (C: Clause): Prop := exists (l: Lit), C = [l].
 
+(* An annotation on a literal (Lit * Ann) describing how its value was assigned. *)
+Inductive Ann: Type :=
+| dec
+| prop.
+
 (* A partial assignment for annoted literals. See `l_eval` for evaluation. *)
-Definition PA: Type := list (Lit * bool).
+Definition PA: Type := list (Lit * Ann).
 
 Notation "m ++a n" := (n ++ m) (at level 65, left associativity).
-Notation "m ++d l" := ((l, true) :: m) (at level 65, left associativity).
-Notation "m ++p l" := ((l, false) :: m) (at level 65, left associativity).
+Notation "m ++d l" := ((l, dec) :: m) (at level 65, left associativity).
+Notation "m ++p l" := ((l, prop) :: m) (at level 65, left associativity).
 
 Equations l_extract (l: Lit): Atom :=
 l_extract (Pos p) := p;
@@ -96,7 +101,7 @@ l_eval ((l', _) :: m) l with l =? l', l =? neg l' :=
   | _   , true := Some false
   | _   , _    := l_eval m l.
 
-Equations l_ann (m: PA) (l: Lit): option bool :=
+Equations l_ann (m: PA) (l: Lit): option Ann :=
 l_ann [] _ := None;
 l_ann ((l', a) :: m) l with l =? l', l =? neg l' :=
   | true, _    := Some a
@@ -157,7 +162,7 @@ Inductive State: Type :=
 | fail
 | state (m: PA) (f: CNF).
 
-Definition NoDecisions (m: PA): Prop := ~ exists (la: Lit * bool), In la m /\ snd la = true.
+Definition NoDecisions (m: PA): Prop := ~ exists (la: Lit * Ann), In la m /\ snd la = dec.
 
 Definition Conflicting (m: PA) (c: Clause): Prop := c_eval m c = Some false.
 
@@ -199,7 +204,7 @@ Definition Final (s: State): Prop := ~ exists (s': State), s ==> s'.
 
 Module TransExamples.
   Example dead_end:
-      state [(Pos 1, false)] [[Pos 1];[Neg 1]] ==>
+      state [(Pos 1, prop)] [[Pos 1];[Neg 1]] ==>
       fail.
   Proof.
     apply (t_fail _ _ [Neg 1]).
@@ -212,7 +217,7 @@ Module TransExamples.
 
   Example unit_prop: 
     (state [] [[Pos 1];[Neg 1]]) ==>
-    (state [(Pos 1, false)] [[Pos 1];[Neg 1]]).
+    (state [(Pos 1, prop)] [[Pos 1];[Neg 1]]).
   Proof.
     apply (t_unit _ _ [Pos 1] _).
     - now left.
@@ -223,7 +228,7 @@ Module TransExamples.
 
   Example decide:
     (state [] [[Pos 1];[Neg 1]]) ==>
-    (state [(Pos 1, true)] [[Pos 1];[Neg 1]]).
+    (state [(Pos 1, dec)] [[Pos 1];[Neg 1]]).
   Proof.
     apply (t_decide _ _ [Pos 1] _).
     - left. now left.
@@ -235,14 +240,14 @@ Module TransExamples.
     (state [] [[Pos 1];[Neg 1]]) ==>*
     fail.
   Proof.
-    apply (rt_trans _ _ _ (state [(Pos 1, false)] [[Pos 1];[Neg 1]]) _).
+    apply (rt_trans _ _ _ (state [(Pos 1, prop)] [[Pos 1];[Neg 1]]) _).
     - apply rt_step. apply unit_prop.
     - apply rt_step. apply dead_end.
   Qed.
 
   Example backtrack:
-    (state [(Pos 1, true)] [[Pos 1];[Neg 1]]) ==>
-    (state [(Neg 1, false)] [[Pos 1];[Neg 1]]).
+    (state [(Pos 1, dec)] [[Pos 1];[Neg 1]]) ==>
+    (state [(Neg 1, prop)] [[Pos 1];[Neg 1]]).
   Proof.
     apply (t_backtrack [] [] _ [Pos 1] [Neg 1] (Pos 1)).
     - left. now left.
@@ -368,10 +373,10 @@ Proof.
   - congruence.
 Qed.
 
-Lemma l_ann_prop_eq: forall (m: PA) (l: Lit), l_ann (m ++p l) l = Some false. 
+Lemma l_ann_prop_eq: forall (m: PA) (l: Lit), l_ann (m ++p l) l = Some prop. 
 Proof. intros. simp l_ann. rewrite eqb_lit_refl. simpl. reflexivity. Qed.
 
-Lemma l_ann_prop_eq_neg: forall (m: PA) (l: Lit), l_ann (m ++p l) (neg l) = Some false. 
+Lemma l_ann_prop_eq_neg: forall (m: PA) (l: Lit), l_ann (m ++p l) (neg l) = Some prop. 
 Proof. 
   intros. simp l_ann. rewrite eqb_lit_refl. pose proof (neg_neq l). apply eqb_lit_neq in H.
   rewrite eqb_lit_sym in H. rewrite H. simpl. reflexivity.
@@ -402,7 +407,7 @@ Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decisio
 Proof.
   unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
   - reflexivity.
-  - exfalso. apply H. exists (l, true). split.
+  - exfalso. apply H. exists (l, dec). split.
     + now left.
     + reflexivity.
   - apply H. intros. apply H0. destruct H1. destruct H1. exists x. split.
@@ -681,13 +686,13 @@ Proof.
   - congruence.
   - rewrite H0 in Heqcall. injection Heqcall as <- <-. destruct n.
     + rewrite app_nil_l in eqargs. now injection eqargs as <-.
-    + injection eqargs as <-. exfalso. apply H. exists (l, true). split.
+    + injection eqargs as <-. exfalso. apply H. exists (l, dec). split.
       * now left.
       * reflexivity.
   - destruct n.
     + discriminate.
-    + injection eqargs as eqargs. destruct p. destruct b.
-      * exfalso. apply H0. exists (l1, true). split.
+    + injection eqargs as eqargs. destruct p. destruct a.
+      * exfalso. apply H0. exists (l1, dec). split.
         -- now left.
         -- reflexivity.
       * injection eqargs as <-. simpl in H1. simp split_last_decision in H1.
@@ -899,10 +904,10 @@ Section dedupe_by.
   Qed.
 End dedupe_by.
 
-Equations eqb_by_atom (la la': Lit * bool): bool :=
+Equations eqb_by_atom (la la': Lit * Ann): bool :=
 eqb_by_atom (l, _) (l', _) := (l =? l') || (l =? neg l'). 
 
-Equations is_bounded (f: CNF) (la: Lit * bool): bool :=
+Equations is_bounded (f: CNF) (la: Lit * Ann): bool :=
 is_bounded f (l, _) := l_in_f l f.
 
 Equations clean (s: State): State :=
@@ -1272,8 +1277,8 @@ Proof.
     + apply eqb_lit_refl.
 Qed.
 
-Lemma undef__no_dupes: forall (m: PA) (l: Lit) (b: bool), 
-  Undef m l -> forallb (neqb_of eqb_by_atom (l, b)) m = true.
+Lemma undef__no_dupes: forall (m: PA) (l: Lit) (a: Ann), 
+  Undef m l -> forallb (neqb_of eqb_by_atom (l, a)) m = true.
 Proof.
   unfold Undef. induction m.
   - intros. simpl. reflexivity.
@@ -1295,7 +1300,7 @@ Lemma dedupe_prop: forall (m: PA) (l: Lit),
 Proof.
   intros. funelim (dedupe_by eqb_by_atom m).
   - reflexivity.
-  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 false) in H0. 
+  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 prop) in H0. 
     apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
 Qed.
 
@@ -1304,30 +1309,30 @@ Lemma dedupe_dec: forall (m: PA) (l: Lit),
 Proof.
   intros. funelim (dedupe_by eqb_by_atom m).
   - reflexivity.
-  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 true) in H0. 
+  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 dec) in H0. 
     apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
 Qed.
 
 Lemma l_eval_some_in: forall (m: PA) (l: Lit) (b: bool), 
-  l_eval m l = Some b -> exists (b': bool), In (l, b') m \/ In (neg l, b') m.
+  l_eval m l = Some b -> exists (a: Ann), In (l, a) m \/ In (neg l, a) m.
 Proof. 
   intros. funelim (l_eval m l).
   - congruence.
-  - rewrite eqb_lit_eq in Heq. subst l'. exists b. left. now left.
-  - rewrite eqb_lit_eq in Heq. subst. exists b. right. rewrite neg_involutive. now left.
+  - rewrite eqb_lit_eq in Heq. subst l'. exists a. left. now left.
+  - rewrite eqb_lit_eq in Heq. subst. exists a. right. rewrite neg_involutive. now left.
   - rewrite H0 in Heqcall. apply H in Heqcall; auto. destruct Heqcall. destruct H1.
     + exists x. left. now right.
     + exists x. right. now right.
 Qed.
 
-Lemma in_l_eval_some: forall (m: PA) (l: Lit) (b: bool), 
-  In (l, b) m -> exists (b': bool), l_eval m l = Some b'.
+Lemma in_l_eval_some: forall (m: PA) (l: Lit) (a: Ann), 
+  In (l, a) m -> exists (b: bool), l_eval m l = Some b.
 Proof.
   intros. funelim (l_eval m l).
   - contradiction.
   - now exists true.
   - now exists false.
-  - apply (H b0). inversion H0.
+  - apply (H a0). inversion H0.
     + injection H1 as <- <-. rewrite eqb_lit_refl in Heq0. discriminate.
     + assumption. 
 Qed.
@@ -1344,14 +1349,14 @@ Proof.
       simp l_eval. rewrite eqb_lit_refl. rewrite eqb_lit_sym. rewrite neg_neqb. simpl. reflexivity.
     + intros. rewrite eqb_lit_eq in Heq. subst l'. simp l_eval in H.
       rewrite eqb_lit_refl in H. rewrite eqb_lit_sym in H. rewrite neg_neqb in H. simpl in H.
-      injection H as H. destruct b0; easy.
+      injection H as H. destruct b; easy.
   - split.
     + intros. rewrite eqb_lit_eq in Heq. subst. rewrite neg_involutive.
       simp l_eval. rewrite eqb_lit_refl. rewrite neg_neqb. simpl. f_equal.
       injection H as <-. reflexivity.
     + intros. f_equal. rewrite eqb_lit_eq in Heq. subst. rewrite neg_involutive in H.
       simp l_eval in H. rewrite neg_neqb in H. rewrite eqb_lit_refl in H. simpl in H.
-      injection H as H. destruct b0; auto.
+      injection H as H. destruct b; auto.
   - split.
     + intros. simp l_eval. rewrite <- eqb_lit_neg_compat. rewrite Heq0. 
       rewrite eqb_lit_neg_compat. rewrite neg_involutive. rewrite Heq. simpl.
@@ -1361,7 +1366,7 @@ Proof.
       simpl in H0. apply H. assumption.
 Qed.
 
-Lemma undef__filter_undef: forall (m: PA) (l: Lit) (test: Lit * bool -> bool),
+Lemma undef__filter_undef: forall (m: PA) (l: Lit) (test: Lit * Ann -> bool),
   Undef m l -> Undef (filter test m) l.
 Proof.
   unfold Undef. intros. pose proof (incl_filter test m). unfold incl in H0.
@@ -1373,7 +1378,7 @@ Proof.
   - reflexivity.
 Qed.
 
-Lemma undef__dedupe_undef: forall (m: PA) (l: Lit) (eq: Lit * bool -> Lit * bool -> bool),
+Lemma undef__dedupe_undef: forall (m: PA) (l: Lit) (eq: Lit * Ann -> Lit * Ann -> bool),
   Undef m l -> Undef (dedupe_by eq m) l.
 Proof.
   unfold Undef. intros. pose proof (incl_dedupe eq m).
@@ -1397,7 +1402,7 @@ Lemma score_dec: forall (m: PA) (f: CNF) (l: Lit),
 Proof. reflexivity. Qed.
 
 Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
-  is_bounded f (l, false) = true ->
+  is_bounded f (l, prop) = true ->
   Undef m l ->
   Bounded m f ->
   NoDuplicates m ->
@@ -1405,7 +1410,7 @@ Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
 Admitted.
 
 Lemma total_dec: forall (m: PA) (f: CNF) (l: Lit),
-  is_bounded f (l, true) = true ->
+  is_bounded f (l, dec) = true ->
   Undef m l ->
   Bounded m f ->
   NoDuplicates m ->
@@ -1433,7 +1438,7 @@ Proof.
   - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. unfold MR. right.
     remember (clean (state m f)) as sc eqn:Hsc. 
     rewrite Hsc. simp clean. simpl. simp state_measure. apply left_slex.
-    destruct (is_bounded f (l_unit, false)) eqn:Hl_bounded.
+    destruct (is_bounded f (l_unit, prop)) eqn:Hl_bounded.
     + rewrite dedupe_prop.
       * destruct sc as [|m' f'].
         -- discriminate.
@@ -1451,7 +1456,7 @@ Proof.
   - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. unfold MR. right.
     remember (clean (state m f)) as sc eqn:Hsc. 
     rewrite Hsc. simp clean. simpl. simp state_measure.
-    destruct (is_bounded f (l_decide, true)) eqn:Hl_bounded.
+    destruct (is_bounded f (l_decide, dec)) eqn:Hl_bounded.
     + rewrite dedupe_dec.
       * rewrite score_dec. right. destruct sc as  [|m' f'].
         -- discriminate.
