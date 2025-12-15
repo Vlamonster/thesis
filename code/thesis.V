@@ -171,10 +171,19 @@ Module EvalExamples.
 End EvalExamples.
 
 Module Trans.
-  (* A state is either the fail state, or a partial assignment with a formula. *)
+  Definition NoDuplicates (m: PA): Prop := 
+    NoDup (map extract (map fst m)).
+
+  Definition Bounded (m: PA) (f: CNF): Prop := 
+    forall (l: Lit), In l (map fst m) -> 
+    exists (c: Clause), In c f /\ (In l c \/ In (¬l) c).
+  
+  Definition WellFormed (m: PA) (f: CNF): Prop :=
+    NoDuplicates m /\ Bounded m f.
+
   Inductive State: Type :=
   | fail
-  | state (m: PA) (f: CNF).
+  | state (m: PA) (f: CNF) (Hwf: WellFormed m f).
 
   (* Propositions used in the transition relation `==>`. *)
   Definition NoDecisions (m: PA): Prop := ~ exists (l: Lit), In (l, dec) m.
@@ -182,32 +191,30 @@ Module Trans.
 
   Inductive Trans: relation State :=
   (* Fail if all literals are assigned and there is a conflict. *)
-  | t_fail (m: PA) (f: CNF) (c: Clause):
+  | t_fail (m: PA) (f: CNF) (c: Clause) (Hwf: WellFormed m f):
     In c f ->
     Conflicting m c ->
     NoDecisions m ->
-    Trans (state m f) fail
+    Trans (state m f Hwf) fail
   (* If a clause is false except for one unassigned literal, assign it to satisfy the clause. *)
-  | t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit):
+  | t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed m f) (Hwf': WellFormed (m ++p l) f):
     In l c ->
     In c f ->
     Conflicting m (l_remove c l) ->
     Undef m l ->
-    Trans (state m f) (state (m ++p l) f)
+    Trans (state m f Hwf) (state (m ++p l) f Hwf')
   (* Arbitrarily set an unassigned literal in the formula to true. *)
-  | t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit):
+  | t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed m f) (Hwf': WellFormed (m ++d l) f):
     In l c \/ In (¬l) c ->
     In c f ->
     Undef m l ->
-    Trans (state m f) (state (m ++d l) f)
+    Trans (state m f Hwf) (state (m ++d l) f Hwf')
   (* Backtrack by flipping the most recent decision literal. *)
-  | t_backtrack (m n: PA) (f: CNF) (c c': Clause) (l: Lit):
-    In l c \/ In (¬l) c ->
+  | t_backtrack (m n: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed (m ++d l ++a n) f) (Hwf': WellFormed (m ++p ¬l) f):
     In c f ->
-    In c' f ->
-    Conflicting (m ++d l ++a n) c' ->
+    Conflicting (m ++d l ++a n) c ->
     NoDecisions n ->
-    Trans (state (m ++d l ++a n) f) (state (m ++p ¬l) f).
+    Trans (state (m ++d l ++a n) f Hwf) (state (m ++p ¬l) f Hwf').
   
   (* The following is the reflexive-transitive closure of `==>`. *)
   Definition TransRTC: relation State := clos_refl_trans State Trans.
@@ -221,7 +228,83 @@ Module Trans.
   Definition Final (s: State): Prop := ~ exists (s': State), s ==> s'.
 End Trans. Import Trans.
 
-Module TransExamples.
+Equations split_last_decision (m: PA): option (PA * Lit) :=
+split_last_decision [] := None;
+split_last_decision (m ++d l) := Some (m, l);
+split_last_decision (m ++p l) := split_last_decision m.
+
+Equations is_conflict (m: PA) (c: Clause): bool :=
+is_conflict m c with c_eval m c :=
+  | Some false := true
+  | _          := false.
+
+Equations find_conflict (m: PA) (f: CNF): option Clause :=
+find_conflict m f := find (is_conflict m) f.
+
+Equations find_unit_l (m: PA) (c: Clause): option Lit :=
+find_unit_l m c := find (fun (l: Lit) => is_conflict m (l_remove c l)) c.
+
+Equations find_unit (m: PA) (f: CNF): option (Clause * Lit) :=
+find_unit m [] := None;
+find_unit m (c :: f) with c_eval m c, find_unit_l m c :=
+  | None, Some l := Some (c, l)
+  | _   , _      := find_unit m f.
+
+Equations is_undefined_l (m: PA) (l: Lit): bool :=
+is_undefined_l m l with l_eval m l := 
+  | None := true
+  | _    := false.
+
+Equations find_undef_l (m: PA) (c: Clause): option Lit :=
+find_undef_l m c := find (is_undefined_l m) c.
+
+Equations find_decision (m: PA) (f: CNF): option Lit :=
+find_decision m [] := None;
+find_decision m (c :: f) with find_undef_l m c, find_decision m f :=
+  | Some l, _ := Some l
+  | _     , r := r.
+
+Definition inspect {A: Type} (a: A): {b | a = b} := exist _ a eq_refl.
+Notation "x 'eqn' ':' p" := (exist _ x p) (only parsing, at level 20).
+
+Lemma wf_backtrack: forall (m m': PA) (f: CNF) (l: Lit),
+  split_last_decision m = Some (m', l) ->
+  WellFormed m f -> WellFormed (m' ++p ¬l) f.
+Admitted.
+
+Lemma wf_unit: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) ->
+  WellFormed m f -> WellFormed (m ++p l) f.
+Admitted.
+
+Lemma wf_decide: forall (m: PA) (f: CNF) (l: Lit),
+  find_decision m f = Some l ->
+  WellFormed m f -> WellFormed (m ++d l) f.
+Admitted.
+
+Equations next_state (s: State): option State :=
+next_state fail := None;
+next_state (state m f Hwf) :=
+  match find_conflict m f with
+  | Some c =>
+    match inspect (split_last_decision m) with
+    (* t_fail *)
+    | None         eqn:Heq => Some fail
+    (* t_backtrack *)
+    | Some (m', l) eqn:Heq => Some (state (m' ++p ¬l) f (wf_backtrack m m' f l Heq Hwf))
+    end
+  | _      =>
+  (* t_unit *)
+  match inspect (find_unit m f) with
+  | Some (c, l)    eqn:Heq => Some (state (m ++p l) f (wf_unit m f c l Heq Hwf))
+  | None           eqn:Heq =>
+  (* t_decide *)
+  match inspect (find_decision m f) with
+  | Some l         eqn:Heq => Some (state (m ++d l) f (wf_decide m f l Heq Hwf))
+  | None           eqn:Heq => None
+  end end end.
+
+(* Module TransExamples.
   Example dead_end:
       state [(Pos 1, prop)] [[Pos 1];[Neg 1]] ==>
       fail.
@@ -275,88 +358,24 @@ Module TransExamples.
     - reflexivity.
     - unfold NoDecisions, not. now intros [? ?].
   Qed.
-End TransExamples.
+End TransExamples. *)
 
-Equations split_last_decision (m: PA): option (PA * Lit) :=
-split_last_decision [] := None;
-split_last_decision (m ++d l) := Some (m, l);
-split_last_decision (m ++p l) := split_last_decision m.
-
-Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
+(* Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
 option_bind f (Some a) := f a.
-
-Equations is_conflict (m: PA) (c: Clause): bool :=
-is_conflict m c with c_eval m c :=
-  | Some false := true
-  | _          := false.
 
 Equations is_undefined_c (m: PA) (c: Clause): bool :=
 is_undefined_c m c with c_eval m c := 
   | None := true
   | _    := false.
 
-Equations is_undefined_l (m: PA) (l: Lit): bool :=
-is_undefined_l m l with l_eval m l := 
-  | None := true
-  | _    := false.
 
-Equations find_conflict (m: PA) (f: CNF): option Clause :=
-find_conflict m f := find (is_conflict m) f.
-
-Equations find_unit_l (m: PA) (c: Clause): option Lit :=
-find_unit_l m c := find (fun (l: Lit) => is_conflict m (l_remove c l)) c.
-
-Equations find_unit (m: PA) (f: CNF): option (Clause * Lit) :=
-find_unit m [] := None;
-find_unit m (c :: f) with c_eval m c, find_unit_l m c :=
-  | None, Some l := Some (c, l)
-  | _   , _      := find_unit m f.
-
-Equations find_undef_l (m: PA) (c: Clause): option Lit :=
-find_undef_l m c := find (is_undefined_l m) c.
-
-Equations find_decision (m: PA) (f: CNF): option Lit :=
-find_decision m [] := None;
-find_decision m (c :: f) with find_undef_l m c, find_decision m f :=
-  | Some l, _ := Some l
-  | _     , r := r.
 
 Equations l_in_c (l: Lit) (c: Clause): bool :=
 l_in_c l c := existsb (eqb l) c || existsb (eqb (¬l)) c.
 
 Equations l_in_f (l: Lit) (f: CNF): bool :=
-l_in_f l f := existsb (l_in_c l) f.
-
-Equations next_state (s: State): option State :=
-next_state fail := None;
-next_state (state m f) :=
-  match find_conflict m f, split_last_decision m with
-  (* t_fail *)
-  | Some c, None => Some fail
-  (* t_backtrack *)
-  | Some c, Some (m', l) => 
-    if l_in_f l f then Some (state (m' ++p ¬l) f)
-    else
-    (* t_unit *)
-    match find_unit m f with
-    | Some (c, l) => Some (state (m ++p l) f)
-    | None        =>
-    (* t_decide *)
-    match find_decision m f with
-    | Some l => Some (state (m ++d l) f)
-    | None   => None
-    end end
-  | _     , _    =>
-  (* t_unit *)
-  match find_unit m f with
-  | Some (c, l) => Some (state (m ++p l) f)
-  | None        =>
-  (* t_decide *)
-  match find_decision m f with
-  | Some l => Some (state (m ++d l) f)
-  | None   => None
-  end end end.
+l_in_f l f := existsb (l_in_c l) f. *)
 
 Compute (next_state (state [] [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
@@ -894,16 +913,6 @@ score m f := rev (score_aux (clip m) (max_lit_f f) 0).
 
 Equations score_total (m: PA) (f: CNF): nat :=
 score_total m f := (max_lit_f f) - length m.
-
-Definition NoDuplicates (m: PA): Prop := 
-  NoDup (map extract (map fst m)).
-
-Definition Bounded (m: PA) (f: CNF): Prop := 
-  forall (l: Lit), In l (map fst m) -> 
-  exists (c: Clause), In c f /\ (In l c \/ In (¬l) c).
-
-Definition Clean (m: PA) (f: CNF): Prop :=
-  NoDuplicates m /\ Bounded m f.
 
 (* The following has to be wrapped in a section due to a bug in Equations. *)
 Section dedupe_by.
@@ -1627,4 +1636,4 @@ Module Satisfiability.
     - right. apply final_unsat_refl. assumption.
     - left. destruct H. apply (final_sat_refl f x). assumption.
   Qed.
-End Satisfiability.
+End Satisfiability. *)
