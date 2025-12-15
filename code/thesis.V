@@ -267,6 +267,66 @@ find_decision m (c :: f) with find_undef_l m c, find_decision m f :=
 Definition inspect {A: Type} (a: A): {b | a = b} := exist _ a eq_refl.
 Notation "x 'eqn' ':' p" := (exist _ x p) (only parsing, at level 20).
 
+Lemma nodup_cons: forall (m: PA) (l: Lit) (a: Ann),
+  NoDuplicates m -> Undef m l -> NoDuplicates ((l, a) :: m).
+Proof.
+  unfold Undef, NoDuplicates. intros. simpl. constructor.
+  - unfold not. intros. funelim (l_eval m l).
+    + contradiction.
+    + congruence.
+    + congruence.
+    + simpl in *. destruct H2. 
+      * destruct l, l'.
+        -- simp extract in H2. subst p0. now rewrite eqb_refl in Heq0.
+        -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
+        -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
+        -- simp extract in H2. subst p0. now rewrite eqb_refl in Heq0.
+      * apply (H m l).
+        -- assumption.
+        -- now inversion H0.
+        -- congruence.
+        -- assumption.
+        -- reflexivity.
+        -- reflexivity.  
+  - assumption.
+Qed.
+
+Equations l_in_c (c: Clause) (l: Lit): bool :=
+l_in_c c l := existsb (eqb l) c || existsb (eqb (¬l)) c.
+
+Equations l_in_f (f: CNF) (l: Lit): bool :=
+l_in_f f l := existsb (fun (c: Clause) => l_in_c c l) f.
+
+Lemma l_in_f_exists: forall (f: CNF) (l: Lit),
+  l_in_f f l = true -> exists (c: Clause), (In l c \/ In (¬l) c) /\ In c f.
+Proof.
+  intros. simp l_in_f in H. apply existsb_exists in H. destruct H. destruct H.
+  simp l_in_c in H0. apply orb_true_iff in H0. exists x. destruct H0.
+  - apply existsb_exists in H0. destruct H0. destruct H0. apply eqb_eq in H1. subst x0. split.
+    + now left.
+    + assumption.
+  - apply existsb_exists in H0. destruct H0. destruct H0. apply eqb_eq in H1. subst x0. split.
+    + now right.
+    + assumption.
+Qed.
+
+Lemma bounded_cons: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
+  Bounded m f -> l_in_f f l = true -> Bounded ((l, a) :: m) f.
+Proof.
+  unfold Bounded. intros. apply l_in_f_exists in H0.
+  destruct H0. destruct H0. destruct H0.
+  - simpl in H1. destruct H1.
+    + subst l0. exists x. split.
+      * assumption.
+      * now left.
+    + now apply H.
+  - simpl in H1. destruct H1.
+    + subst l0. exists x. split.
+      * assumption.
+      * now right.
+    + now apply H.
+Qed.
+
 Lemma wf_backtrack: forall (m m': PA) (f: CNF) (l: Lit),
   split_last_decision m = Some (m', l) ->
   WellFormed m f -> WellFormed (m' ++p ¬l) f.
@@ -277,10 +337,50 @@ Lemma wf_unit: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
   WellFormed m f -> WellFormed (m ++p l) f.
 Admitted.
 
+Lemma find_decision__undef: forall (m: PA) (f: CNF) (l: Lit),
+  find_decision m f = Some l -> Undef m l.
+Proof.
+  unfold Undef. intros. funelim (find_decision m f).
+  - congruence.
+  - rewrite H in Heqcall. injection Heqcall as <-. funelim (find_undef_l m c).
+    rewrite Heq in Heqcall. apply find_some in Heqcall. funelim (is_undefined_l m l).
+    + intuition congruence.
+    + assumption.
+  - rewrite H in Heqcall. now apply Hind.
+Qed.
+
+Lemma find_decision__bounded: forall (m: PA) (f: CNF) (l: Lit),
+  find_decision m f = Some l -> l_in_f f l = true.
+Proof. 
+  intros. funelim (find_decision m f).
+  - congruence.
+  - rewrite H in Heqcall. injection Heqcall as <-. funelim (find_undef_l m c).
+    rewrite Heq in Heqcall. apply find_some in Heqcall.
+    simp l_in_f. apply existsb_exists. exists c. split.
+    + now left.
+    + simp l_in_c. apply orb_true_iff. left. destruct Heqcall as [Hin _].
+      apply existsb_exists. exists l. split.
+      * assumption.
+      * apply eqb_refl.
+  - rewrite H in Heqcall. apply Hind in Heqcall. simp l_in_f in *.
+    apply existsb_exists in Heqcall. destruct Heqcall. destruct H0.
+    apply existsb_exists. exists x. split.
+    + now right.
+    + assumption.
+Qed.
+
 Lemma wf_decide: forall (m: PA) (f: CNF) (l: Lit),
   find_decision m f = Some l ->
   WellFormed m f -> WellFormed (m ++d l) f.
-Admitted.
+Proof.
+  unfold WellFormed. intros m f l Heq Hwf. split.
+  - apply nodup_cons.
+    + intuition.
+    + now apply find_decision__undef in Heq.
+  - apply bounded_cons.
+    + intuition.
+    + now apply find_decision__bounded in Heq.
+Qed.
 
 Equations next_state (s: State): option State :=
 next_state fail := None;
@@ -371,11 +471,7 @@ is_undefined_c m c with c_eval m c :=
 
 
 
-Equations l_in_c (l: Lit) (c: Clause): bool :=
-l_in_c l c := existsb (eqb l) c || existsb (eqb (¬l)) c.
 
-Equations l_in_f (l: Lit) (f: CNF): bool :=
-l_in_f l f := existsb (l_in_c l) f. *)
 
 Compute (next_state (state [] [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
@@ -709,18 +805,7 @@ Proof.
     + apply eqb_refl.
 Qed.
 
-Lemma l_in_f__l_in_c_in_f: forall (f: CNF) (l: Lit),
-  l_in_f l f = true -> exists (c: Clause), (In l c \/ In (¬l) c) /\ In c f.
-Proof.
-  intros. simp l_in_f in H. apply existsb_exists in H. destruct H. destruct H.
-  simp l_in_c in H0. apply orb_true_iff in H0. exists x. destruct H0.
-  - apply existsb_exists in H0. destruct H0. destruct H0. apply eqb_eq in H1. subst x0. split.
-    + now left.
-    + assumption.
-  - apply existsb_exists in H0. destruct H0. destruct H0. apply eqb_eq in H1. subst x0. split.
-    + now right.
-    + assumption.
-Qed.
+
 
 Lemma split_last_dec: forall (m m' n: PA) (l l': Lit),
   NoDecisions n -> split_last_decision (m ++d l ++a n) = Some (m', l') -> l = l'.
@@ -1435,47 +1520,6 @@ Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
   NoDuplicates m ->
   PrefixLt (max_lit_f f) (score (m ++p l) f) (score m f).
 Admitted.
-
-Lemma bounded_cons: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
-  Bounded m f -> is_bounded f (l, a) = true -> Bounded ((l, a) :: m) f.
-Proof.
-  unfold Bounded. intros. simp is_bounded in H0. apply l_in_f__l_in_c_in_f in H0.
-  destruct H0. destruct H0. destruct H0.
-  - simpl in H1. destruct H1.
-    + subst l0. exists x. split.
-      * assumption.
-      * now left.
-    + now apply H.
-  - simpl in H1. destruct H1.
-    + subst l0. exists x. split.
-      * assumption.
-      * now right.
-    + now apply H.
-Qed.
-
-Lemma nodup_cons: forall (m: PA) (l: Lit) (a: Ann),
-  NoDuplicates m -> Undef m l -> NoDuplicates ((l, a) :: m).
-Proof.
-  unfold Undef, NoDuplicates. intros. simpl. constructor.
-  - unfold not. intros. funelim (l_eval m l).
-    + contradiction.
-    + congruence.
-    + congruence.
-    + simpl in *. destruct H2. 
-      * destruct l, l'.
-        -- simp extract in H2. subst p0. now rewrite eqb_refl in Heq0.
-        -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
-        -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
-        -- simp extract in H2. subst p0. now rewrite eqb_refl in Heq0.
-      * apply (H m l).
-        -- assumption.
-        -- now inversion H0.
-        -- congruence.
-        -- assumption.
-        -- reflexivity.
-        -- reflexivity.  
-  - assumption.
-Qed.
 
 Lemma bounded__nodup__length_le: forall (m: PA) (f: CNF) (l: Lit),
   Bounded (m ++d l) f ->
