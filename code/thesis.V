@@ -358,13 +358,19 @@ Lemma nodup_cons__undef: forall (m: PA) (l: Lit) (a: Ann),
   NoDuplicates ((l, a) :: m) -> Undef m l.
 Proof. Admitted.
 
-Lemma nodup_app__nodup: forall (m n: PA),
-  NoDuplicates (m ++a n) -> NoDuplicates m.
-Proof. Admitted.
-
 Lemma nodup_cons__nodup: forall (m: PA) (l: Lit) (a: Ann),
   NoDuplicates ((l, a) :: m) -> NoDuplicates m.
 Proof. intros. now inversion H. Qed.
+
+Lemma nodup_app__nodup: forall (m n: PA),
+  NoDuplicates (m ++a n) -> NoDuplicates m.
+Proof.
+  induction n.
+  - now intros.
+  - intros. simpl in H. apply nodup_cons__nodup in H.
+    + now apply IHn.
+    + apply dec.
+Qed.
 
 Lemma undef__neg_undef: forall (m: PA) (l: Lit), Undef m l <-> Undef m (¬l).
 Proof.
