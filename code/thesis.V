@@ -1154,6 +1154,79 @@ Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': S
   next_state (state m f Hwf) = Some s' -> state m f Hwf >>[f] s'.
 Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
 
+Lemma next_state_options: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
+  next_state (state m f Hwf) = None \/
+  next_state (state m f Hwf) = Some fail \/ 
+  exists (m': PA) (Hwf': WellFormed m' f), next_state (state m f Hwf) = Some (state m' f Hwf').
+Proof.
+  intros. funelim (next_state (state m f Hwf)).
+  - left. reflexivity.
+  - injection eqargs as eqargs. subst m0 f0. rewrite Heqcall. destruct (find_conflict m f).
+    + destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
+      -- right. right. now exists (m_split ++p ¬l_split), ((wf_backtrack m m_split f l_split Hsplit Hwf)).
+      -- right. now left.
+    + destruct (inspect (find_unit m f)) as [[(c_unit, l_unit)|] Hfind_unit].
+      * right. right. now exists (m ++p l_unit), (wf_unit m f c_unit l_unit Hfind_unit Hwf).
+      * destruct (inspect (find_decision m f)) as [[l_dec|] Hfind_dec].
+        -- right. right. now exists (m ++d l_dec), (wf_decide m f l_dec Hfind_dec Hwf).
+        -- now left.
+Qed.
+
+Lemma trans_same_formula: forall (m m': PA) (f f': CNF) (Hwf: WellFormed m f) (Hwf': WellFormed m' f'), 
+  state m f Hwf ==> state m' f' Hwf' -> f = f'.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF) (Hwf: WellFormed m f) (Hwf': WellFormed m' f'), 
+  state m f Hwf ==>* state m' f' Hwf' -> f = f'.
+Proof. 
+  intros m m' f f' Hwf Hwf' H. apply clos_rt_rtn1_iff in H. 
+  remember (state m f Hwf) as s eqn:Heqs.
+  remember (state m' f' Hwf') as s' eqn:Heqs'.
+  generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
+  induction H.
+  - intros. congruence.
+  - intros. destruct y, z; try congruence.
+    + inversion H.
+    + subst. injection Heqs' as Heqs'. subst. apply trans_same_formula in H. subst.
+      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m) (Hwf':=Hwf0) (Hwf:=Hwf). reflexivity. reflexivity.
+Qed.
+
+Lemma initial_wf: forall (f: CNF), WellFormed [] f.
+Proof.
+  unfold WellFormed, NoDuplicates, Bounded. split.
+  - constructor.
+  - now intros.
+Qed.
+
+Lemma initial_refl: forall (f: CNF), state [] f (initial_wf f) ==>* state [] f (initial_wf f).
+Proof. intros. apply rt_refl. Qed.
+
+Section solve.
+  Context (f: CNF). 
+  
+  Instance wf_state_lt_f: WellFounded (StateLt f) := wf_state_lt f.
+
+  Equations solve_aux (s: State) (H: state [] f (initial_wf f) ==>* s): State by wf s (StateLt f) :=
+  solve_aux s H with inspect (next_state s) :=
+    | Some s' eqn:ns := solve_aux s' ((rt_trans _ _ _ s s' H (rt_step _ _ s s' (next_state_sound s s' ns))))
+    | None    eqn:ns := s.
+  Next Obligation.
+    destruct s.
+    - inversion ns.
+    - destruct (next_state_options m f0 Hwf) as [G|[G|G]].
+      + congruence.
+      + rewrite ns in G. injection G as ->. now constructor.
+      + rewrite ns in G. destruct G. destruct H0. injection H0 as ->.
+        apply next_state_sound in ns. assert (state [] f (initial_wf f) ==>* state x f0 x0).
+        * apply (rt_trans _ _ _ (state m f0 Hwf)).
+          -- assumption.
+          -- now apply rt_step.
+        * apply trans_clos_same_formula in H0. subst f0. now apply trans__state_lt.
+  Qed.
+
+  Definition solve: State := solve_aux (state [] f (initial_wf f)) (initial_refl f).
+End solve.
+
 (*
 Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
@@ -1271,30 +1344,6 @@ solve_n (S n) s with next_state s :=
   | Some s' := solve_n n s'
   | None := s.
 
-Lemma next_state_options: forall (m: PA) (f: CNF),
-  next_state (state m f) = None \/
-  next_state (state m f) = Some fail \/ 
-  exists m': PA, next_state (state m f) = Some (state m' f).
-Proof.
-  intros. funelim (next_state (state m f)).
-  - left. reflexivity.
-  - injection eqargs as eqargs. subst m0 f0. rewrite Heqcall. destruct (find_conflict m f).
-    + destruct (split_last_decision m).
-      * destruct p. destruct (l_in_f l f).
-        -- right. right. now exists (p ++p ¬l).
-        -- destruct (find_unit m f).
-          ++ destruct p0. right. right. now exists (m ++p l0).
-          ++ destruct (find_decision m f).
-            ** right. right. now exists (m ++d l0).
-            ** now left.
-      * right. now left.
-    + destruct (find_unit m f).
-      * destruct p. right. right. now exists (m ++p l).
-      * destruct (find_decision m f).
-        -- right. right. now exists (m ++d l).
-        -- now left.
-Qed.
-
 Lemma negl_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
   In (¬l) c -> In c f -> l_in_f l f = true.
 Proof. 
@@ -1345,55 +1394,6 @@ Proof.
       rewrite Neg.eqb_compat in H0. rewrite Neg.involutive in H0. rewrite Heq in H0.
       simpl in H0. apply H. assumption.
 Qed.
-
-Lemma trans_same_formula: forall (m m': PA) (f f': CNF), state m f ==> state m' f' -> f = f'.
-Proof. intros. inversion H; subst; reflexivity. Qed.
-
-Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF), state m f ==>* state m' f' -> f = f'.
-Proof.
-  intros. apply clos_rt_rtn1_iff in H. 
-  remember (state m f) as s eqn:Heqs.
-  remember (state m' f') as s' eqn:Heqs'.
-  generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
-  induction H.
-  - intros. congruence.
-  - intros. destruct y, z; try congruence.
-    + inversion H.
-    + subst. injection Heqs' as Heqs'. subst. apply trans_same_formula in H. subst.
-      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m). reflexivity. reflexivity.
-Qed.
-
-Lemma initial_refl: forall (f: CNF), state [] f ==>* state [] f.
-Proof. intros. apply rt_refl. Qed.
-
-Section solve.
-  Context (f: CNF). 
-  
-  Instance wf_state_lt_f: WellFounded (StateLt f) := wf_state_lt f.
-
-  Definition inspect {A} (a: A) : {b | a = b} := exist _ a eq_refl.
-  Notation "x 'eqn' ':' p" := (exist _ x p) (only parsing, at level 20).
-
-  Equations solve_aux (s: State) (H: state [] f ==>* s): State by wf s (StateLt f) :=
-  solve_aux s H with inspect (next_state s) :=
-    | Some s' eqn:ns := solve_aux s' ((rt_trans _ _ _ s s' H (rt_step _ _ s s' (next_state_sound s s' ns))))
-    | None    eqn:ns := s.
-  Next Obligation.
-    destruct s.
-    - inversion ns.
-    - destruct (next_state_options m f0) as [G|[G|G]].
-      + congruence.
-      + rewrite ns in G. injection G as G. subst. constructor. simp clean. simpl. constructor.
-      + rewrite ns in G. destruct G. injection H0 as H0. subst s'.
-        apply next_state_sound in ns. assert (state [] f ==>* state x f0).
-        * apply (rt_trans _ _ _ (state m f0)).
-          -- assumption.
-          -- now apply rt_step.
-        * apply trans_clos_same_formula in H0. subst f0. now apply trans__state_lt.
-  Qed.
-
-  Definition solve: State := solve_aux (state [] f) (initial_refl f).
-End solve.
 
 Module Satisfiability.
   Definition Total (m: PA) (f: CNF): Prop := forall (l: Lit) (c: Clause), In l c -> In c f -> Def m l.
