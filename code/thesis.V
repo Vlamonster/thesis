@@ -634,7 +634,128 @@ next_state (state m f Hwf) :=
   | None           eqn:Heq => None
   end end end.
 
-(* Module TransExamples.
+Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
+Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
+
+Lemma find_conflict_conflicting: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
+Proof. 
+  unfold Conflicting. intros. simp find_conflict in H. apply find_some in H as [_ H]. funelim (is_conflict m c).
+  - congruence.
+  - assumption.
+  - congruence.
+Qed.
+
+Lemma no_split__no_decision: forall (m: PA), split_last_decision m = None -> NoDecisions m.
+Proof. 
+  unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
+  - destruct H0. destruct H0.
+  - discriminate.
+  - destruct H1. destruct H1.
+    + discriminate.
+    + apply (H m).
+      * assumption.
+      * now exists x.
+      * reflexivity.
+      * reflexivity.
+Qed.
+
+Lemma find_unit_conflicting: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> Conflicting m (l_remove c l).
+Proof.
+  unfold Conflicting. intros. funelim (find_unit m f).
+  - discriminate.
+  - apply H. congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst.
+    funelim (find_unit_l m c0). rewrite Heq in Heqcall. apply find_some in Heqcall.
+    destruct Heqcall. funelim (is_conflict m (l_remove c l0)).
+    + congruence.
+    + assumption.
+    + congruence.
+  - apply H. congruence.
+Qed.
+
+Lemma find_unit_undef: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
+  find_unit m f = Some (c, l) -> Undef m l.
+Proof.
+  unfold Undef. intros. funelim (find_unit m f).
+  - discriminate.
+  - apply (H c0 l0). congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. funelim (find_unit_l m c0).
+    rewrite Heq in Heqcall. apply find_some in Heqcall. destruct Heqcall.
+    funelim (is_conflict m (l_remove c l0)).
+    + congruence.
+    + apply (undef_remove_false__undef m c0 l0); assumption.
+    + congruence.
+  - apply (H c0 l). congruence.
+Qed.
+
+Lemma find_decision_decomp: forall (m: PA) (f: CNF) (l: Lit), 
+  find_decision m f = Some l -> exists (c: Clause), find_undef_l m c = Some l /\ In c f.
+Proof.
+  intros. funelim (find_decision m f).
+  - congruence.
+  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst l0. exists c. split.
+    + assumption.
+    + left. reflexivity.
+  - rewrite H in Heqcall. apply Hind in Heqcall. destruct Heqcall. destruct H0.
+    exists x. split.
+    + assumption.
+    + right. assumption.
+Qed.
+
+Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
+Proof.
+  intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
+  apply find_some in Heqcall. destruct Heqcall. assumption.
+Qed.
+
+Lemma find_undef_l_undef: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> Undef m l.
+Proof. 
+  unfold Undef. intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
+  apply find_some in Heqcall. destruct Heqcall. funelim (is_undefined_l m l).
+  - congruence.
+  - assumption.
+Qed.
+
+Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
+Proof.
+  intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
+  - discriminate.
+  - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
+    + destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] split_last_decision].
+      (* t_backtrack *)
+      * injection Heqcall as Heqcall. rewrite Heqcall. 
+        pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
+        destruct decomp as [n_split [decomp no_dec]]. subst m.
+        apply (t_backtrack m_split n_split f c_conflict l_split).
+        -- apply (find_conflict_c_in_f (m_split ++d l_split ++a n_split) f c_conflict). assumption.
+        -- apply (find_conflict_conflicting (m_split ++d l_split ++a n_split) f c_conflict). assumption.
+        -- assumption.
+      (* t_fail *)
+      * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
+        -- apply (find_conflict_c_in_f m f c_conflict). assumption.
+        -- apply (find_conflict_conflicting m f c_conflict). assumption.
+        -- apply (no_split__no_decision m). assumption.
+    + destruct (inspect (find_unit m f)) as [[(c_unit, l_unit)|] find_unit].
+      (* t_unit *)
+      * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
+        -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
+        -- apply (find_unit_c_in_f m f c_unit l_unit). assumption.
+        -- apply (find_unit_conflicting m f c_unit l_unit). assumption.
+        -- apply (find_unit_undef m f c_unit l_unit). assumption.
+      * destruct (inspect (find_decision m f)) as [[l_decide|] find_decision].
+        (* t_decide *)
+        -- injection Heqcall as Heqcall. rewrite Heqcall.
+           destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
+           apply (t_decide m f c_decide l_decide).
+          ++ left. apply (find_undef_l_in_c m c_decide l_decide). assumption.
+          ++ assumption.
+          ++ apply (find_undef_l_undef m c_decide l_decide). assumption.
+        -- discriminate.
+Qed.
+
+(* 
+Module TransExamples.
   Example dead_end:
       state [(Pos 1, prop)] [[Pos 1];[Neg 1]] ==>
       fail.
@@ -688,9 +809,9 @@ next_state (state m f Hwf) :=
     - reflexivity.
     - unfold NoDecisions, not. now intros [? ?].
   Qed.
-End TransExamples. *)
+End TransExamples.
 
-(* Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
+Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
 option_bind f (Some a) := f a.
 
@@ -701,26 +822,11 @@ is_undefined_c m c with c_eval m c :=
 
 
 
-
-
 Compute (next_state (state [] [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
 
 Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
 Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
-
-
-
-Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
-Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
-
-Lemma find_conflict_conflicting: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
-Proof. 
-  unfold Conflicting. intros. simp find_conflict in H. apply find_some in H as [_ H]. funelim (is_conflict m c).
-  - congruence.
-  - assumption.
-  - congruence.
-Qed.
 
 Lemma l_ann_prop_eq: forall (m: PA) (l: Lit), l_ann (m ++p l) l = Some prop. 
 Proof. intros. simp l_ann. rewrite eqb_refl. simpl. reflexivity. Qed.
@@ -736,19 +842,6 @@ Proof.
   intros. destruct H. simp l_ann. rewrite <- eqb_neq in H, H0. rewrite H, H0. simpl. reflexivity.
 Qed.
 
-Lemma no_split__no_decision: forall (m: PA), split_last_decision m = None -> NoDecisions m.
-Proof. 
-  unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
-  - destruct H0. destruct H0.
-  - discriminate.
-  - destruct H1. destruct H1.
-    + discriminate.
-    + apply (H m).
-      * assumption.
-      * now exists x.
-      * reflexivity.
-      * reflexivity.
-Qed.
 
 Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decision m = None.
 Proof.
@@ -758,131 +851,11 @@ Proof.
   - apply H. intros. apply H0. destruct H1. exists x. now right.
 Qed.
 
-Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
-Proof.
-  intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
-  apply find_some in Heqcall. destruct Heqcall. assumption.
-Qed.
-
-Lemma find_undef_l_undef: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> Undef m l.
-Proof. 
-  unfold Undef. intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
-  apply find_some in Heqcall. destruct Heqcall. funelim (is_undefined_l m l).
-  - congruence.
-  - assumption.
-Qed.
-
-Lemma find_decision_decomp: forall (m: PA) (f: CNF) (l: Lit), 
-  find_decision m f = Some l -> exists (c: Clause), find_undef_l m c = Some l /\ In c f.
-Proof.
-  intros. funelim (find_decision m f).
-  - congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst l0. exists c. split.
-    + assumption.
-    + left. reflexivity.
-  - rewrite H in Heqcall. apply Hind in Heqcall. destruct Heqcall. destruct H0.
-    exists x. split.
-    + assumption.
-    + right. assumption.
-Qed.
-
-
-
-Lemma find_unit_conflicting: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
-  find_unit m f = Some (c, l) -> Conflicting m (l_remove c l).
-Proof.
-  unfold Conflicting. intros. funelim (find_unit m f).
-  - discriminate.
-  - apply H. congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst.
-    funelim (find_unit_l m c0). rewrite Heq in Heqcall. apply find_some in Heqcall.
-    destruct Heqcall. funelim (is_conflict m (l_remove c l0)).
-    + congruence.
-    + assumption.
-    + congruence.
-  - apply H. congruence.
-Qed.
-
-Lemma find_unit_undef: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
-  find_unit m f = Some (c, l) -> Undef m l.
-Proof.
-  unfold Undef. intros. funelim (find_unit m f).
-  - discriminate.
-  - apply (H c0 l0). congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. funelim (find_unit_l m c0).
-    rewrite Heq in Heqcall. apply find_some in Heqcall. destruct Heqcall.
-    funelim (is_conflict m (l_remove c l0)).
-    + congruence.
-    + apply (undef_remove_false__undef m c0 l0); assumption.
-    + congruence.
-  - apply (H c0 l). congruence.
-Qed.
-
 Lemma app_cancel: forall (m n: PA), m ++a n = m -> n = [].
 Proof.
   induction m.
   - intros. rewrite app_nil_r in H. assumption.
   - intros. apply IHm. apply (app_inv_tail (a::m) _ []) in H. rewrite H. simpl. reflexivity.
-Qed.
-
-Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
-Proof.
-  intros. funelim (next_state s); rewrite H in Heqcall; clear H; symmetry in Heqcall.
-  - discriminate.
-  - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
-    + destruct (split_last_decision m) as [(m_split, l_split)|] eqn:split_last_decision.
-      (* t_backtrack *)
-      * destruct (l_in_f l_split f) eqn:Hl_in_f.
-        -- injection Heqcall as Heqcall. rewrite Heqcall. 
-          pose proof (split_decomp _ _ _ split_last_decision) as decomp. 
-          destruct decomp as [n_split [decomp no_dec]]. rewrite decomp.
-          simp l_in_f in Hl_in_f. apply existsb_exists in Hl_in_f as [c_decide [Hc_in_f Hx_in_c]].
-          apply (t_backtrack m_split n_split f c_decide c_conflict l_split).
-          ++ simp l_in_c in Hx_in_c. apply orb_true_iff in Hx_in_c as [Hl_in_c|Hnegl_in_c].
-            ** left. apply existsb_exists in Hl_in_c as [l_decide [Hl_in_c Heq]]. 
-               apply eqb_eq in Heq. congruence.
-            ** right. apply existsb_exists in Hnegl_in_c as [l_decide [Hnegl_in_c Heq]].
-               apply eqb_eq in Heq. congruence.
-          ++ assumption.
-          ++ apply (find_conflict_c_in_f m f c_conflict). assumption.
-          ++ rewrite <- decomp. apply (find_conflict_conflicting m f c_conflict). assumption.
-          ++ assumption.
-        -- destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
-          (* t_unit *)
-          ++ injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
-            ** apply (find_unit_l_in_c m f c_unit l_unit). assumption.
-            ** apply (find_unit_c_in_f m f c_unit l_unit). assumption.
-            ** apply (find_unit_conflicting m f c_unit l_unit). assumption.
-            ** apply (find_unit_undef m f c_unit l_unit). assumption.
-          ++ destruct (find_decision m f) as [l_decide|] eqn:find_decision.
-            ** injection Heqcall as Heqcall. rewrite Heqcall.
-               destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
-               apply (t_decide m f c_decide l_decide).
-              --- left. apply (find_undef_l_in_c m c_decide l_decide). assumption.
-              --- assumption.
-              --- apply (find_undef_l_undef m c_decide l_decide). assumption.
-            ** discriminate.
-      (* t_fail *)
-      * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_fail m f c_conflict).
-        -- apply (find_conflict_c_in_f m f c_conflict). assumption.
-        -- apply (find_conflict_conflicting m f c_conflict). assumption.
-        -- apply (no_split__no_decision m). assumption.
-    + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
-      (* t_unit *)
-      * injection Heqcall as Heqcall. rewrite Heqcall. apply (t_unit m f c_unit l_unit).
-        -- apply (find_unit_l_in_c m f c_unit l_unit). assumption.
-        -- apply (find_unit_c_in_f m f c_unit l_unit). assumption.
-        -- apply (find_unit_conflicting m f c_unit l_unit). assumption.
-        -- apply (find_unit_undef m f c_unit l_unit). assumption.
-      * destruct (find_decision m f) as [l_decide|] eqn:find_decision.
-        (* t_decide *)
-        -- injection Heqcall as Heqcall. rewrite Heqcall.
-           destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
-           apply (t_decide m f c_decide l_decide).
-          ++ left. apply (find_undef_l_in_c m c_decide l_decide). assumption.
-          ++ assumption.
-          ++ apply (find_undef_l_undef m c_decide l_decide). assumption.
-        -- discriminate.
 Qed.
 
 Lemma find_conflict_exists: forall (m: PA) (f: CNF) (c: Clause),
@@ -1790,4 +1763,5 @@ Module Satisfiability.
     - right. apply final_unsat_refl. assumption.
     - left. destruct H. apply (final_sat_refl f x). assumption.
   Qed.
-End Satisfiability. *)
+End Satisfiability. 
+*)
