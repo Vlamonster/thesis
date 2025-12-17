@@ -1241,9 +1241,7 @@ Module Satisfiability.
   Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
 
   Theorem final_exists: forall (f: CNF),
-    (state [] f (initial_wf f) ==>* fail /\ Final fail) \/
-    (exists (m: PA) (Hwf: WellFormed m f), 
-      state [] f (initial_wf f) ==>* state m f Hwf /\ Final (state m f Hwf)).
+    exists (s: State), state [] f (initial_wf f) ==>* s /\ Final s.
   Admitted.
 
   Theorem final_sat_refl: forall (f: CNF) (m: PA) (Hwf: WellFormed m f),
