@@ -754,6 +754,97 @@ Proof.
         -- discriminate.
 Qed.
 
+Lemma find_conflict_exists: forall (m: PA) (f: CNF) (c: Clause),
+  In c f -> Conflicting m c -> exists (c': Clause), find_conflict m f = Some c'.
+Proof.
+  unfold Conflicting. intros m f c Hin Hc. destruct (find_conflict m f) as [c'|] eqn:Hfind.
+  - now exists c'.
+  - simp find_conflict in Hfind. pose proof (find_none (is_conflict m) f Hfind c Hin) as contra.
+    simp is_conflict in contra. rewrite Hc in contra. simpl in contra. discriminate.
+Qed.
+
+Lemma find_undef_l_exists : forall (m: PA) (c: Clause) (l: Lit),
+  In l c -> Undef m l -> exists (l': Lit), find_undef_l m c = Some l'.
+Proof.
+  unfold Undef. intros. destruct (find_undef_l m c) eqn:G.
+  - now exists l0.
+  - simp find_undef_l in G. apply (find_none (is_undefined_l m) c G l) in H.
+    simp is_undefined_l in H. rewrite H0 in H. discriminate.
+Qed.
+
+Lemma find_decision_exists: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
+  In l c -> In c f -> Undef m l -> exists (l': Lit), find_decision m f = Some l'.
+Proof. 
+  intros. funelim (find_decision m f).
+  - contradiction.
+  - now exists l.
+  - apply (Hind c0 l); auto. inversion H0; auto. subst.
+    destruct (find_undef_l_exists m c0 l H H1). congruence.
+Qed.
+
+(* The rhs is weaker because there could be multiple { s': State | s ==> s' }. *)
+Lemma next_state_exists: forall (s s': State), s ==> s' -> exists (s'': State), next_state s = Some s''.
+Proof.
+  intros. inversion H as 
+    [
+      m f c_conflict Hwf Hc_in_f Hconflict Hno_dec |
+      m f c_unit l_unit Hwf Hwf' Hl_in_c Hc_in_f Hconflict Hundef |
+      m f c_decide l_decide Hwf Hwf' Hx_in_c Hc_in_f Hundef |
+      m_split n_split f c_conflict l_split Hwf Hwf' Hc_in_f Hconflict Hno_dec
+    ]; subst s s'.
+  (* t_fail *)
+  - funelim (next_state (state m f Hwf)).
+    + discriminate.
+    + injection eqargs as <- <-.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
+        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+        -- now exists fail.
+      * destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
+  (* t_unit *)
+  - funelim (next_state (state m f Hwf)).
+    + discriminate.
+    + injection eqargs as <- <-.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
+        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+        -- now exists fail.
+      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
+        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
+        -- destruct (inspect (find_decision m f)) as [[l_decide|] Hfind_dec].
+          ++ now exists (state (m ++d l_decide) f (wf_decide m f l_decide Hfind_dec Hwf)).
+          ++ destruct (find_decision_exists m f c_unit l_unit Hl_in_c Hc_in_f Hundef). congruence.
+  (* t_decide *)
+  - funelim (next_state (state m f Hwf)).
+    + discriminate.
+    + injection eqargs as <- <-.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
+        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+        -- now exists fail.
+      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
+        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
+        -- destruct (inspect (find_decision m f)) as [[l_decide'|] Hfind_dec].
+          ++ now exists (state (m ++d l_decide') f (wf_decide m f l_decide' Hfind_dec Hwf)).
+          ++ destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
+            ** destruct (find_decision_exists m f c_decide l_decide Hl_in_c Hc_in_f Hundef). congruence.
+            ** apply undef__neg_undef in Hundef.
+               destruct (find_decision_exists m f c_decide (neg l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
+  (* t_backtrack *)
+  - funelim (next_state (state (m_split ++d l_split ++a n_split) f Hwf)).
+    + discriminate.
+    + injection eqargs as ? <-. rewrite <- H0 in *. clear H0.
+      destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
+      * destruct (inspect (split_last_decision m)) as [[(m_split', l_split')|] Hsplit].
+        -- now exists (state (m_split' ++p (¬l_split')) f (wf_backtrack m m_split' f l_split' Hsplit Hwf)).
+        -- now exists fail.
+      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
+        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
+        -- destruct (inspect (find_decision m f)) as [[l_decide'|] Hfind_dec].
+          ++ now exists (state (m ++d l_decide') f (wf_decide m f l_decide' Hfind_dec Hwf)).
+          ++ destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
+Qed.
+
 (* 
 Module TransExamples.
   Example dead_end:
@@ -858,33 +949,7 @@ Proof.
   - intros. apply IHm. apply (app_inv_tail (a::m) _ []) in H. rewrite H. simpl. reflexivity.
 Qed.
 
-Lemma find_conflict_exists: forall (m: PA) (f: CNF) (c: Clause),
-  In c f -> Conflicting m c -> exists (c': Clause), find_conflict m f = Some c'.
-Proof.
-  unfold Conflicting. intros m f c Hin Hc. destruct (find_conflict m f) as [c'|] eqn:Hfind.
-  - now exists c'.
-  - simp find_conflict in Hfind. pose proof (find_none (is_conflict m) f Hfind c Hin) as contra.
-    simp is_conflict in contra. rewrite Hc in contra. simpl in contra. discriminate.
-Qed.
 
-Lemma find_undef_l_exists : forall (m: PA) (c: Clause) (l: Lit),
-  In l c -> Undef m l -> exists (l': Lit), find_undef_l m c = Some l'.
-Proof.
-  unfold Undef. intros. destruct (find_undef_l m c) eqn:G.
-  - now exists l0.
-  - simp find_undef_l in G. apply (find_none (is_undefined_l m) c G l) in H.
-    simp is_undefined_l in H. rewrite H0 in H. discriminate.
-Qed.
-
-Lemma find_decision_exists: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
-  In l c -> In c f -> Undef m l -> exists (l': Lit), find_decision m f = Some l'.
-Proof. 
-  intros. funelim (find_decision m f).
-  - contradiction.
-  - now exists l.
-  - apply (Hind c0 l); auto. inversion H0; auto. subst.
-    destruct (find_undef_l_exists m c0 l H H1). congruence.
-Qed.
 
 
 
