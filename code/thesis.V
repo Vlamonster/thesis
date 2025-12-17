@@ -1258,7 +1258,7 @@ Module Satisfiability.
     - right. now apply final_unsat_refl.
     - left. destruct H. assert (f = f').
       + now apply (trans_clos_same_formula [] m f f' (initial_wf f) Hwf).
-      + subst f'. apply (final_sat_refl m f Hwf). split; assumption.
+      + subst f'. now apply (final_sat_refl m f Hwf).
   Qed.
 End Satisfiability.
 
