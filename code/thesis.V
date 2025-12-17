@@ -1097,63 +1097,64 @@ Proof.
         rewrite Nat.eqb_refl. simpl. apply orb_true_r.
 Qed.
 
-(* 
-Module TransExamples.
-  Example dead_end:
-      state [(Pos 1, prop)] [[Pos 1];[Neg 1]] ==>
-      fail.
-  Proof.
-    apply (t_fail _ _ [Neg 1]).
-    - right. now left.
-    - reflexivity.
-    - unfold NoDecisions, not. intros [l [H|H]].
-      + discriminate.
-      + contradiction.
-  Qed.
+Lemma prefix_unit: forall (m: PA) (f: CNF) (l: Lit),
+  WellFormed (m ++p l) f ->
+  PrefixLt (max_lit_f f) (score (m ++p l) f) (score m f).
+Proof. Admitted.
 
-  Example unit_prop: 
-    (state [] [[Pos 1];[Neg 1]]) ==>
-    (state [(Pos 1, prop)] [[Pos 1];[Neg 1]]).
-  Proof.
-    apply (t_unit _ _ [Pos 1] _).
-    - now left.
-    - now left.
-    - reflexivity.
-    - reflexivity.
-  Qed.
+Lemma score_dec: forall (m: PA) (f: CNF) (l: Lit),
+  score (m ++d l) f = score m f.
+Proof. reflexivity. Qed.
 
-  Example decide:
-    (state [] [[Pos 1];[Neg 1]]) ==>
-    (state [(Pos 1, dec)] [[Pos 1];[Neg 1]]).
-  Proof.
-    apply (t_decide _ _ [Pos 1] _).
-    - left. now left.
-    - now left.
-    - reflexivity.
-  Qed.
+Lemma wf__length_le: forall (m: PA) (f: CNF),
+  WellFormed m f ->
+  length m <= max_lit_f f.
+Proof. Admitted.
 
-  Example unit_prop__dead_end:
-    (state [] [[Pos 1];[Neg 1]]) ==>*
-    fail.
-  Proof.
-    apply (rt_trans _ _ _ (state [(Pos 1, prop)] [[Pos 1];[Neg 1]]) _).
-    - apply rt_step. apply unit_prop.
-    - apply rt_step. apply dead_end.
-  Qed.
+Lemma total_dec: forall (m: PA) (f: CNF) (l: Lit),
+  WellFormed (m ++d l) f ->
+  TotalLt (score_total (m ++d l) f) (score_total m f).
+Proof.
+  intros m f l Hwf. pose proof (wf__length_le (m ++d l) f Hwf).
+  unfold TotalLt. simp score_total. simpl in *. lia.
+Qed.
 
-  Example backtrack:
-    (state [(Pos 1, dec)] [[Pos 1];[Neg 1]]) ==>
-    (state [(Neg 1, prop)] [[Pos 1];[Neg 1]]).
-  Proof.
-    apply (t_backtrack [] [] _ [Pos 1] [Neg 1] (Pos 1)).
-    - left. now left.
-    - now left.
-    - right. now left.
-    - reflexivity.
-    - unfold NoDecisions, not. now intros [? ?].
-  Qed.
-End TransExamples.
+Lemma prefix_backtrack: forall (m n: PA) (f: CNF) (l: Lit),
+  WellFormed (m ++d l ++a n) f ->
+  WellFormed (m ++p ¬l) f ->
+  PrefixLt (max_lit_f f) (score (m ++p ¬l) f) (score (m ++d l ++a n) f).
+Proof. Admitted.
 
+Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State) (Hwf: WellFormed m f),
+  state m f Hwf ==> s' -> state m f Hwf >>[f] s'.
+Proof.
+  intros. inversion H as 
+    [
+      m' f' c_conflict Hwf' Hc_in_f Hconflict Hno_dec |
+      m' f' c_unit l_unit ? Hwf' Hl_in_c Hc_in_f Hconflict Hundef |
+      m' f' c_decide l_decide ? Hwf' Hx_in_c Hc_in_f Hundef |
+      m_split n_split f' c_conflict l_split ? Hwf' Hc_in_f Hconflict Hno_dec
+    ]; subst s'; try subst m'; try subst f'.
+  (* t_fail *)
+  - unfold StateLt. now left.
+  (* t_unit *)
+  - unfold StateLt. right. unfold MR. simp state_measure. apply left_slex.
+    now apply prefix_unit.
+  (* t_decide *)
+  - unfold StateLt. right. unfold MR. simp state_measure. rewrite score_dec. apply right_slex.
+    now apply total_dec.
+  (* t_backtrack *)
+  - unfold StateLt. right. unfold MR. simp state_measure. rewrite <- H0. apply left_slex.
+    apply prefix_backtrack.
+    + now rewrite H0.
+    + assumption.
+Qed.
+
+Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
+  next_state (state m f Hwf) = Some s' -> state m f Hwf >>[f] s'.
+Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
+
+(*
 Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
 option_bind f (Some a) := f a.
@@ -1162,14 +1163,6 @@ Equations is_undefined_c (m: PA) (c: Clause): bool :=
 is_undefined_c m c with c_eval m c := 
   | None := true
   | _    := false.
-
-
-
-Compute (next_state (state [] [[Pos 1];[Neg 1]])).
-Compute (option_bind next_state (next_state (state [] [[Pos 1];[Neg 1]]))).
-
-Compute (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]])).
-Compute (option_bind next_state (next_state (state ([] ++d Pos 1) [[Pos 1];[Neg 1]]))).
 
 Lemma l_ann_prop_eq: forall (m: PA) (l: Lit), l_ann (m ++p l) l = Some prop. 
 Proof. intros. simp l_ann. rewrite eqb_refl. simpl. reflexivity. Qed.
@@ -1184,7 +1177,6 @@ Lemma l_ann_prop_neq: forall (m: PA) (l l': Lit), l' <> l /\ l' <> ¬l -> l_ann 
 Proof. 
   intros. destruct H. simp l_ann. rewrite <- eqb_neq in H, H0. rewrite H, H0. simpl. reflexivity.
 Qed.
-
 
 Lemma no_decision__no_split: forall (m: PA), NoDecisions m -> split_last_decision m = None.
 Proof.
@@ -1201,10 +1193,6 @@ Proof.
   - intros. apply IHm. apply (app_inv_tail (a::m) _ []) in H. rewrite H. simpl. reflexivity.
 Qed.
 
-
-
-
-
 Lemma l_in_c__c_in_f__l_in_f: forall (f: CNF) (c: Clause) (l: Lit),
   In l c -> In c f -> l_in_f l f = true.
 Proof. 
@@ -1214,8 +1202,6 @@ Proof.
     + assumption.
     + apply eqb_refl.
 Qed.
-
-
 
 Lemma split_last_dec: forall (m m' n: PA) (l l': Lit),
   NoDecisions n -> split_last_decision (m ++d l ++a n) = Some (m', l') -> l = l'.
@@ -1285,116 +1271,6 @@ solve_n (S n) s with next_state s :=
   | Some s' := solve_n n s'
   | None := s.
 
-
-
-Equations max_lit (s: State): nat :=
-max_lit fail        := 0;
-max_lit (state _ f) := max_lit_f f. 
-
-
-
-(* The following has to be wrapped in a section due to a bug in Equations. *)
-Section dedupe_by.
-  Context {A: Type} (eq: A -> A -> bool).
-
-  Equations neqb_of (l l': A): bool :=
-  neqb_of a b := negb (eq a b).
-
-  Equations dedupe_by (m: list A): list A by wf (length m) lt :=
-  dedupe_by []       := [];
-  dedupe_by (l :: m) := l :: dedupe_by (filter (neqb_of l) m).
-  Next Obligation.
-    eapply Nat.le_lt_trans.
-    - apply filter_length_le.
-    - auto with arith.
-  Qed.
-End dedupe_by.
-
-Equations eqb_by_atom (la la': Lit * Ann): bool :=
-eqb_by_atom (l, _) (l', _) := (l =? l') || (l =? ¬l'). 
-
-Equations is_bounded (f: CNF) (la: Lit * Ann): bool :=
-is_bounded f (l, _) := l_in_f l f.
-
-Equations clean (s: State): State :=
-clean fail        := fail;
-clean (state m f) := 
-  let bounded := filter (is_bounded f) m in
-  let deduped := dedupe_by eqb_by_atom bounded in
-  state deduped f.
-
-Lemma incl_dedupe {A: Type} (eq: A -> A -> bool) (l: list A):
-  incl (dedupe_by eq l) l.
-Proof.
-  unfold incl. funelim (dedupe_by eq l); simp dedupe_by; cbn.
-  intros a [Heq | H0].
-  - rewrite Heq. left; reflexivity.
-  - specialize (H _ H0). apply filter_In in H as [Inal eqa].
-    right; assumption.
-Qed.
-
-Lemma dedupe_by__nodup: forall (m: PA),
-  NoDup (map extract (map fst (dedupe_by eqb_by_atom m))).
-Proof.
-  intros. funelim (dedupe_by eqb_by_atom m).
-  - simpl. constructor.
-  - simpl. constructor.
-    + unfold not. intros. destruct l. apply in_map_iff in H0 as [x [Heq Hin]].
-      apply in_map_iff in Hin as [x' [Heq' Hin']]. simpl in Heq.
-      simp eqb_atom in Hin'. apply incl_dedupe in Hin'. apply filter_In in Hin' as [_ G].
-      destruct x'. simp neqb_of in G. simpl in Heq'. subst x. simp eqb_by_atom in G.
-      destruct l, l0.
-      * simp extract in Heq. subst. rewrite eqb_refl in G. discriminate.
-      * simp extract in Heq. subst. rewrite eqb_refl in G. discriminate.
-      * simp extract in Heq. subst. rewrite eqb_refl in G. discriminate.
-      * simp extract in Heq. subst. rewrite eqb_refl in G. discriminate.
-    + assumption.
-Qed.
-
-Lemma clean__no_duplicates: forall (m m': PA) (f f': CNF), 
-  clean (state m f) = state m' f' -> NoDuplicates m'.
-Proof.
-  unfold NoDuplicates. intros. funelim (clean (state m f)).
-  - discriminate.
-  - injection eqargs as eqargs. subst m0 f0. rewrite H in Heqcall.
-    destruct (filter (is_bounded f) m) eqn:G.
-    + simp dedupe_by in Heqcall. injection Heqcall as Heqcall. subst m' f'. simpl. constructor.
-    + simp dedupe_by in Heqcall. injection Heqcall as Heqcall. subst m' f'. simpl. constructor.
-      * unfold not. intros. apply in_map_iff in H0 as [x [Heq Hin]].
-        apply in_map_iff in Hin as [x' [Heq' Hin']]. apply incl_dedupe in Hin'.
-        apply filter_In in Hin' as [_ G1].
-        -- destruct p. simpl in Heq. destruct x'. simpl in Heq'. subst.
-           simp neqb_of in G1. simp eqb_by_atom in G1. destruct x, l0.
-          ++ simp extract in Heq. subst p0. rewrite eqb_refl in G1. discriminate.
-          ++ simp extract in Heq. subst p0. rewrite eqb_refl in G1. discriminate.
-          ++ simp extract in Heq. subst p0. rewrite eqb_refl in G1. discriminate.
-          ++ simp extract in Heq. subst p0. rewrite eqb_refl in G1. discriminate.
-      * apply dedupe_by__nodup.
-Qed.
-
-Lemma clean__bounded: forall (m m': PA) (f f': CNF),
-  clean (state m f) = state m' f' -> Bounded m' f'.
-Proof.
-  unfold Bounded. intros. funelim (clean (state m f)).
-  - discriminate.
-  - injection eqargs as eqargs. subst m0 f0. rewrite H in Heqcall. injection Heqcall as Heqcall.
-    subst f' m'. apply in_map_iff in H0 as [x [Heq Hin]]. apply incl_dedupe in Hin.
-    apply filter_In in Hin as [Hin Hbnd]. funelim (is_bounded f x). funelim (l_in_f l f).
-    rewrite Hbnd in Heqcall. rewrite Heqcall in Heqcall0. 
-    apply existsb_exists in Heqcall0 as [c [Hcinf Hlinc]]. exists c.
-    funelim (l_in_c l c). rewrite Hlinc in Heqcall0. apply orb_true_iff in Heqcall0 as [G|G].
-    + split.
-      * assumption.
-      * left. apply existsb_exists in G as [x [G1 G2]]. simpl. rewrite eqb_eq in G2. now subst.
-    + split.
-      * assumption.
-      * right. apply existsb_exists in G as [x [G1 G2]]. simpl. rewrite eqb_eq in G2. now subst.
-Qed.
-
-Lemma clean_same_formula: forall (m m': PA) (f f': CNF),
-  clean (state m f) = state m' f' -> f = f'.
-Proof. intros. simp clean in H. simpl in H. injection H as _ <-. reflexivity. Qed.
-
 Lemma next_state_options: forall (m: PA) (f: CNF),
   next_state (state m f) = None \/
   next_state (state m f) = Some fail \/ 
@@ -1428,44 +1304,6 @@ Proof.
     + assumption.
     + apply eqb_refl.
 Qed.
-
-Lemma undef__no_dupes: forall (m: PA) (l: Lit) (a: Ann), 
-  Undef m l -> forallb (neqb_of eqb_by_atom (l, a)) m = true.
-Proof.
-  unfold Undef. induction m.
-  - intros. simpl. reflexivity.
-  - intros. simpl. simp neqb_of. apply andb_true_iff. split.
-    + destruct a. simp eqb_by_atom. destruct (l =? l0) eqn:G1, (l =? ¬l0) eqn:G2.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simpl. reflexivity.
-    + apply IHm. destruct a. destruct (l =? l0) eqn:G1, (l =? ¬l0) eqn:G2.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. discriminate.
-      * simp l_eval in H. rewrite G1, G2 in H. simpl in H. assumption.
-Qed.
-
-Lemma dedupe_prop: forall (m: PA) (l: Lit), 
-  Undef m l -> dedupe_by eqb_by_atom (m ++p l) = dedupe_by eqb_by_atom m ++p l.
-Proof.
-  intros. funelim (dedupe_by eqb_by_atom m).
-  - reflexivity.
-  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 prop) in H0. 
-    apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
-Qed.
-
-Lemma dedupe_dec: forall (m: PA) (l: Lit), 
-  Undef m l -> dedupe_by eqb_by_atom (m ++d l) = dedupe_by eqb_by_atom m ++d l.
-Proof.
-  intros. funelim (dedupe_by eqb_by_atom m).
-  - reflexivity.
-  - simp dedupe_by. apply (undef__no_dupes (l :: m) l0 dec) in H0. 
-    apply forallb_filter_id in H0. rewrite H0. now simp dedupe_by.
-Qed.
-
-
 
 Lemma in_l_eval_some: forall (m: PA) (l: Lit) (a: Ann), 
   In (l, a) m -> exists (b: bool), l_eval m l = Some b.
@@ -1507,127 +1345,6 @@ Proof.
       rewrite Neg.eqb_compat in H0. rewrite Neg.involutive in H0. rewrite Heq in H0.
       simpl in H0. apply H. assumption.
 Qed.
-
-Lemma undef__filter_undef: forall (m: PA) (l: Lit) (test: Lit * Ann -> bool),
-  Undef m l -> Undef (filter test m) l.
-Proof.
-  unfold Undef. intros. pose proof (incl_filter test m). unfold incl in H0.
-  destruct (l_eval (filter test m) l) eqn:G.
-  - apply l_eval_some_in in G as [b' [G|G]].
-    + apply H0 in G. apply in_l_eval_some in G. destruct G. congruence.
-    + apply H0 in G. apply in_l_eval_some in G. destruct G. apply l_eval_some_neg in H1.
-      rewrite Neg.involutive in H1. congruence.
-  - reflexivity.
-Qed.
-
-Lemma undef__dedupe_undef: forall (m: PA) (l: Lit) (eq: Lit * Ann -> Lit * Ann -> bool),
-  Undef m l -> Undef (dedupe_by eq m) l.
-Proof.
-  unfold Undef. intros. pose proof (incl_dedupe eq m).
-  destruct (l_eval (dedupe_by eq m) l) eqn:G.
-  - apply l_eval_some_in in G as [b' [G|G]].
-    + apply H0 in G. apply in_l_eval_some in G. destruct G. congruence.
-    + apply H0 in G. apply in_l_eval_some in G. destruct G. apply l_eval_some_neg in H1.
-      rewrite Neg.involutive in H1. congruence.
-  - reflexivity.
-Qed.
-
-Lemma undef__clean_undef: forall (m m': PA) (f f': CNF) (l: Lit),
-  Undef m l -> clean (state m f) = state m' f' -> Undef m' l.
-Proof.
-  intros. simp clean in H0. simpl in H0. injection H0 as <- <-.
-  apply undef__dedupe_undef. now apply undef__filter_undef.
-Qed.
-
-Lemma score_dec: forall (m: PA) (f: CNF) (l: Lit),
-  score (m ++d l) f = score m f.
-Proof. reflexivity. Qed.
-
-Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
-  is_bounded f (l, prop) = true ->
-  Undef m l ->
-  Bounded m f ->
-  NoDuplicates m ->
-  PrefixLt (max_lit_f f) (score (m ++p l) f) (score m f).
-Admitted.
-
-Lemma bounded__nodup__length_le: forall (m: PA) (f: CNF) (l: Lit),
-  Bounded (m ++d l) f ->
-  NoDuplicates (m ++d l) ->
-  length (m ++d l) <= max_lit_f f.
-Proof.
-Admitted.
-
-Lemma total_dec: forall (m: PA) (f: CNF) (l: Lit),
-  is_bounded f (l, dec) = true ->
-  Undef m l ->
-  Bounded m f ->
-  NoDuplicates m ->
-  TotalLt (max_lit_f f - length (m ++d l)) (max_lit_f f - length m).
-Proof.
-  intros m f l Hl_bounded Hundef Hm_bounded Hm_nodup. unfold TotalLt. unfold lt.
-  pose proof (bounded_cons m f l dec Hm_bounded Hl_bounded) as Hbounded. clear Hm_bounded Hl_bounded.
-  pose proof (nodup_cons m l dec Hm_nodup Hundef) as Hnodup. clear Hundef Hm_nodup.
-  pose proof (bounded__nodup__length_le m f l Hbounded Hnodup). simpl in *. lia.
-Qed.
-
-Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State), state m f ==> s' -> state m f >>[f] s'.
-Proof.
-  intros. inversion H as 
-    [
-      m' f' c_conflict Hc_in_f Hconflict Hno_dec |
-      m' f' c_unit l_unit Hl_in_c Hc_in_f Hconflict Hundef |
-      m' f' c_decide l_decide Hx_in_c Hc_in_f Hundef |
-      m_split n_split f' c_decide c_conflict l_split Hx_in_c Hc_in_f Hc'_in_f Hconflict Hno_dec
-    ]; subst s'; try subst m'; try subst f'.
-  (* t_fail *)
-  - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. left.
-    simp clean. simpl. constructor.
-  (* t_unit *)
-  - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. unfold MR. right.
-    remember (clean (state m f)) as sc eqn:Hsc. 
-    rewrite Hsc. simp clean. simpl. simp state_measure. apply left_slex.
-    destruct (is_bounded f (l_unit, prop)) eqn:Hl_bounded.
-    + rewrite dedupe_prop.
-      * destruct sc as [|m' f'].
-        -- discriminate.
-        -- symmetry in Hsc.
-           pose proof (undef__clean_undef m m' f f' l_unit Hundef Hsc) as Hundef'.
-           pose proof (clean__bounded m m' f f' Hsc) as Hm_bounded.
-           pose proof (clean__no_duplicates m m' f f' Hsc) as Hno_dup.
-           simp clean in Hsc. simpl in Hsc. injection Hsc as -> ->.
-           clear Hl_in_c Hc_in_f Hundef Hconflict c_unit.
-           apply prefix_prop; assumption.
-      * now apply undef__filter_undef.
-    + simp is_bounded in Hl_bounded. 
-      now rewrite (l_in_c__c_in_f__l_in_f f c_unit l_unit Hl_in_c Hc_in_f) in Hl_bounded.
-  (* t_decide *)
-  - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. unfold MR. right.
-    remember (clean (state m f)) as sc eqn:Hsc. 
-    rewrite Hsc. simp clean. simpl. simp state_measure.
-    destruct (is_bounded f (l_decide, dec)) eqn:Hl_bounded.
-    + rewrite dedupe_dec.
-      * rewrite score_dec. right. destruct sc as  [|m' f'].
-        -- discriminate.
-        -- symmetry in Hsc.
-           pose proof (undef__clean_undef m m' f f' l_decide Hundef Hsc) as Hundef'.
-           pose proof (clean__bounded m m' f f' Hsc) as Hm_bounded.
-           pose proof (clean__no_duplicates m m' f f' Hsc) as Hno_dup.
-           simp clean in Hsc. simpl in Hsc. injection Hsc as -> ->. simp score_total.
-           clear Hx_in_c Hc_in_f Hundef c_decide.
-           apply total_dec; assumption.
-      * now apply undef__filter_undef.
-    + simp is_bounded in Hl_bounded. destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
-      * now rewrite (l_in_c__c_in_f__l_in_f f c_decide l_decide Hl_in_c Hc_in_f) in Hl_bounded.
-      * now rewrite (negl_in_c__c_in_f__l_in_f f c_decide l_decide Hnegl_in_c Hc_in_f) in Hl_bounded.
-  (* t_backtrack *)
-  - unfold StateLt. unfold MR. unfold StateLtUnion. unfold union. right.
-    unfold MR. simp clean. simpl. simp state_measure. apply left_slex. admit.
-Admitted.
-
-Lemma next_state__state_lt: forall (m: PA) (f: CNF) (s': State), 
-  next_state (state m f) = Some s' -> state m f >>[f] s'.
-Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
 
 Lemma trans_same_formula: forall (m m': PA) (f f': CNF), state m f ==> state m' f' -> f = f'.
 Proof. intros. inversion H; subst; reflexivity. Qed.
