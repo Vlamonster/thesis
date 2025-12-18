@@ -327,6 +327,54 @@ Proof.
     + now apply H.
 Qed.
 
+Lemma bounded_cons__bounded: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
+  Bounded ((l, a) :: m) f -> Bounded m f.
+Proof. 
+  unfold Bounded. intros. destruct (H l0).
+  - now right.
+  - now exists x.
+Qed.
+
+Lemma bounded_app__bounded: forall (m n: PA) (f: CNF),
+  Bounded (m ++a n) f -> Bounded m f.
+Proof.
+  induction n.
+  - now intros.
+  - intros. simpl in H. apply bounded_cons__bounded in H.
+    + now apply IHn.
+    + apply dec.
+Qed.
+
+Lemma nodup_cons__nodup: forall (m: PA) (l: Lit) (a: Ann),
+  NoDuplicates ((l, a) :: m) -> NoDuplicates m.
+Proof. intros. now inversion H. Qed.
+
+Lemma nodup_app__nodup: forall (m n: PA),
+  NoDuplicates (m ++a n) -> NoDuplicates m.
+Proof.
+  induction n.
+  - now intros.
+  - intros. simpl in H. apply nodup_cons__nodup in H.
+    + now apply IHn.
+    + apply dec.
+Qed.
+
+Lemma wf_cons__wf: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
+  WellFormed ((l, a) :: m) f -> WellFormed m f.
+Proof.
+  unfold WellFormed. intros. destruct H. split.
+  - now apply nodup_cons__nodup in H.
+  - now apply bounded_cons__bounded in H0.
+Qed.
+
+Lemma wf_app__wf: forall (m n: PA) (f: CNF),
+  WellFormed (m ++a n) f -> WellFormed m f.
+Proof.
+  unfold WellFormed. intros. destruct H. split.
+  - now apply nodup_app__nodup in H.
+  - now apply bounded_app__bounded in H0.
+Qed.
+
 Lemma split_decomp: forall (m m': PA) (l': Lit),
   split_last_decision m = Some (m', l') -> exists (n': PA), m = m' ++d l' ++a n' /\ NoDecisions n'.
 Proof.
@@ -380,20 +428,6 @@ Proof.
       * destruct l; reflexivity.
       * apply in_map_iff. exists (¬l, x0). intuition.
   - reflexivity.
-Qed.
-
-Lemma nodup_cons__nodup: forall (m: PA) (l: Lit) (a: Ann),
-  NoDuplicates ((l, a) :: m) -> NoDuplicates m.
-Proof. intros. now inversion H. Qed.
-
-Lemma nodup_app__nodup: forall (m n: PA),
-  NoDuplicates (m ++a n) -> NoDuplicates m.
-Proof.
-  induction n.
-  - now intros.
-  - intros. simpl in H. apply nodup_cons__nodup in H.
-    + now apply IHn.
-    + apply dec.
 Qed.
 
 Lemma undef__neg_undef: forall (m: PA) (l: Lit), Undef m l <-> Undef m (¬l).
@@ -1125,7 +1159,7 @@ Proof.
         rewrite Nat.eqb_refl. simpl. apply orb_true_r.
 Qed.
 
-Lemma prefix_unit: forall (m: PA) (f: CNF) (l: Lit),
+Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
   WellFormed (m ++p l) f ->
   PrefixLt (max_atom_f f) (score (m ++p l) f) (score m f).
 Proof. Admitted.
@@ -1148,10 +1182,9 @@ Proof.
   unfold TotalLt. simp score_total. simpl in *. destruct (length m); lia.
 Qed.
 
-Lemma prefix_backtrack: forall (m n: PA) (f: CNF) (l: Lit),
-  WellFormed (m ++d l ++a n) f ->
-  WellFormed (m ++p ¬l) f ->
-  PrefixLt (max_atom_f f) (score (m ++p ¬l) f) (score (m ++d l ++a n) f).
+Lemma prefix_app: forall (m n: PA) (f: CNF) (l l': Lit),
+  PrefixLt (max_atom_f f) (score (m ++p l) f) (score (m ++d l') f) ->
+  PrefixLt (max_atom_f f) (score (m ++p l) f) (score (m ++d l' ++a n) f).
 Proof. Admitted.
 
 Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State) (Hwf: WellFormed m f),
@@ -1168,16 +1201,16 @@ Proof.
   - unfold StateLt. now left.
   (* t_unit *)
   - unfold StateLt. right. unfold MR. simp state_measure. apply left_slex.
-    now apply prefix_unit.
+    now apply prefix_prop.
   (* t_decide *)
   - unfold StateLt. right. unfold MR. simp state_measure. rewrite score_dec.
     + apply right_slex. now apply total_decide.
     + assumption.
   (* t_backtrack *)
   - unfold StateLt. right. unfold MR. simp state_measure. rewrite <- H0. apply left_slex.
-    apply prefix_backtrack.
-    + now rewrite H0.
-    + assumption.
+    apply prefix_app. rewrite score_dec.
+    + now apply prefix_prop.
+    + apply (wf_app__wf _ n_split). now rewrite H0.
 Qed.
 
 Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
