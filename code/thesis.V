@@ -1239,10 +1239,19 @@ Proof.
       * reflexivity.
 Qed.
 
+Lemma pigeon: forall (l: list nat) (m: nat),
+  (forall (n: nat), In n l -> n <= m) ->
+  length l <= S m.
+Proof. Admitted.
+
 Lemma wf__length_le: forall (m: PA) (f: CNF),
   WellFormed m f ->
   length m <= S (max_atom_f f).
-Proof. Admitted.
+Proof.
+  intros m f Hwf. assert (Heq: length m = length (map extract (map fst m))).
+  - now repeat rewrite length_map.
+  - rewrite Heq. apply pigeon. intros. apply (wf_le m); assumption.
+Qed.
 
 Lemma score_aux_length: forall (m: PA) (n n': nat),
   length (score_aux m n n') <= S (length m).
