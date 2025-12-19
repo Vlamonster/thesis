@@ -1240,17 +1240,20 @@ Proof.
 Qed.
 
 Lemma pigeon: forall (l: list nat) (m: nat),
+  NoDup l ->
   (forall (n: nat), In n l -> n <= m) ->
   length l <= S m.
 Proof. Admitted.
 
-Lemma wf__length_le: forall (m: PA) (f: CNF),
+Lemma wf_length_le: forall (m: PA) (f: CNF),
   WellFormed m f ->
   length m <= S (max_atom_f f).
 Proof.
   intros m f Hwf. assert (Heq: length m = length (map extract (map fst m))).
   - now repeat rewrite length_map.
-  - rewrite Heq. apply pigeon. intros. apply (wf_le m); assumption.
+  - rewrite Heq. apply pigeon.
+    + now destruct Hwf.
+    + intros. apply (wf_le m); assumption.
 Qed.
 
 Lemma score_aux_length: forall (m: PA) (n n': nat),
@@ -1269,7 +1272,7 @@ Proof.
   intros. 
   pose proof (score_aux_length m (max_atom_f f) 0).
   pose proof (score_aux_length (m ++d l) (max_atom_f f) 0).
-  pose proof (wf__length_le (m ++d l) f H).
+  pose proof (wf_length_le (m ++d l) f H).
   simpl in *. lia.
 Qed.
 
@@ -1293,7 +1296,7 @@ Lemma total_decide: forall (m: PA) (f: CNF) (l: Lit),
   WellFormed (m ++d l) f ->
   TotalLt (score_total (m ++d l) f) (score_total m f).
 Proof.
-  intros m f l Hwf. pose proof (wf__length_le (m ++d l) f Hwf).
+  intros m f l Hwf. pose proof (wf_length_le (m ++d l) f Hwf).
   unfold TotalLt. simp score_total. simpl in *. destruct (length m); lia.
 Qed.
 
