@@ -847,7 +847,7 @@ Proof.
           ++ destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
             ** destruct (find_decision_exists m f c_decide l_decide Hl_in_c Hc_in_f Hundef). congruence.
             ** apply undef__neg_undef in Hundef.
-               destruct (find_decision_exists m f c_decide (neg l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
+               destruct (find_decision_exists m f c_decide (¬l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
   (* t_backtrack *)
   - funelim (next_state (state (m_split ++d l_split ++a n_split) f Hwf)).
     + discriminate.
