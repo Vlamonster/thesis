@@ -901,22 +901,22 @@ Equations score (m: PA) (f: CNF): list nat :=
 score m f :=
   let max_atom := max_atom_f f in
   let unpadded := rev (score_aux m max_atom 0) in
-  pad unpadded max_atom (S max_atom - length unpadded).
+  pad unpadded max_atom (S (S max_atom) - length unpadded).
 
 Equations score_total (m: PA) (f: CNF): nat :=
 score_total m f := S (max_atom_f f) - length m.
 
 Module ScoreExamples.
-  Example score_1: score [] [[Pos 1;Pos 2]] = [2; 2; 2].
+  Example score_1: score [] [[Pos 1;Pos 2]] = [2; 2; 2; 2].
   Proof. reflexivity. Qed.
 
-  Example score_2: score ([] ++p Pos 1) [[Pos 1;Pos 2]] = [1; 2; 2].
+  Example score_2: score ([] ++p Pos 1) [[Pos 1;Pos 2]] = [1; 2; 2; 2].
   Proof. reflexivity. Qed.
 
-  Example score_3: score ([] ++d Pos 1) [[Pos 1;Pos 2]] = [2; 2; 2].
+  Example score_3: score ([] ++d Pos 1) [[Pos 1;Pos 2]] = [2; 2; 2; 2].
   Proof. reflexivity. Qed.
 
-  Example score_4: score ([] ++d Neg 1 ++p Pos 2) [[Pos 1;Pos 2]] = [2; 1; 2].
+  Example score_4: score ([] ++d Neg 1 ++p Pos 2) [[Pos 1;Pos 2]] = [2; 1; 2; 2].
   Proof. reflexivity. Qed.
 
   Example score_total_1: score_total [] [[Pos 1;Pos 2]] = 3.
@@ -1171,7 +1171,7 @@ Proof. Admitted.
 
 Lemma score_aux_le: forall (m: PA) (f: CNF) (l: Lit),
   WellFormed (m ++d l) f ->
-  length (score_aux m (max_atom_f f) 0) <= max_atom_f f.
+  length (score_aux m (max_atom_f f) 0) <= S (max_atom_f f).
 Proof. Admitted.
 
 Lemma score_dec: forall (m: PA) (f: CNF) (l: Lit),
@@ -1182,8 +1182,10 @@ Proof.
   rewrite length_app. simpl. rewrite Nat.add_1_r. 
   destruct (length (rev (score_aux m (max_atom_f f) 0))) eqn:G.
   - simp pad. now rewrite Nat.sub_0_r.
-  - rewrite length_rev in G. pose proof (score_aux_le m f l H).
-    + assert (T: S (max_atom_f f - S n) = max_atom_f f - n).
+  - destruct n.
+    + simp pad. now rewrite Nat.sub_0_r.
+    + rewrite length_rev in G. pose proof (score_aux_le m f l H).
+      assert (T: S (max_atom_f f - S n) = max_atom_f f - n).
       * lia.
       * rewrite <- T. simp pad. now rewrite Nat.sub_0_r.
 Qed.
