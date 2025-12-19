@@ -175,7 +175,7 @@ Module Trans.
     NoDup (map extract (map fst m)).
 
   Definition Bounded (m: PA) (f: CNF): Prop := 
-    forall (l: Lit), In l (map fst m) -> 
+    forall (l: Lit) (a: Ann), In (l, a) m -> 
     exists (c: Clause), In c f /\ (In l c \/ In (¬l) c).
   
   Definition WellFormed (m: PA) (f: CNF): Prop :=
@@ -313,26 +313,20 @@ Qed.
 Lemma bounded_cons: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
   Bounded m f -> l_in_f f l = true -> Bounded ((l, a) :: m) f.
 Proof.
-  unfold Bounded. intros. apply l_in_f_exists in H0.
-  destruct H0. destruct H0. destruct H0.
-  - simpl in H1. destruct H1.
-    + subst l0. exists x. split.
-      * assumption.
-      * now left.
-    + now apply H.
-  - simpl in H1. destruct H1.
-    + subst l0. exists x. split.
-      * assumption.
-      * now right.
-    + now apply H.
+  unfold Bounded. intros m f l a Hbounded Hl_in_f l' a' Hin. 
+  apply l_in_f_exists in Hl_in_f as [c [[Hl_in_c|Hnegl_in_c] Hc_in_f ]].
+  - inversion Hin.
+    + injection H as <- <-. exists c. intuition.
+    + now apply Hbounded in H.
+  - inversion Hin.
+    + injection H as <- <-. exists c. intuition.
+    + now apply Hbounded in H.
 Qed.
 
 Lemma bounded_cons__bounded: forall (m: PA) (f: CNF) (l: Lit) (a: Ann),
   Bounded ((l, a) :: m) f -> Bounded m f.
-Proof. 
-  unfold Bounded. intros. destruct (H l0).
-  - now right.
-  - now exists x.
+Proof.
+  unfold Bounded. intros m f l a Hbounded l' a' Hin. apply (Hbounded l' a'). now right.
 Qed.
 
 Lemma bounded_app__bounded: forall (m n: PA) (f: CNF),
@@ -340,9 +334,7 @@ Lemma bounded_app__bounded: forall (m n: PA) (f: CNF),
 Proof.
   induction n.
   - now intros.
-  - intros. simpl in H. apply bounded_cons__bounded in H.
-    + now apply IHn.
-    + apply dec.
+  - intros. simpl in H. destruct a. apply bounded_cons__bounded in H. now apply IHn.
 Qed.
 
 Lemma nodup_cons__nodup: forall (m: PA) (l: Lit) (a: Ann),
@@ -393,13 +385,8 @@ Qed.
 Lemma bounded_incl: forall (m m': PA) (f: CNF),
   incl m m' -> Bounded m' f -> Bounded m f.
 Proof.
-  unfold incl. intros m m' f Hincl Hbounded.
-  unfold Bounded in *. intros. apply in_map_iff in H. destruct H. destruct H. apply Hincl in H0.
-  assert (In l (map fst m')).
-  - apply in_map_iff. exists x. split.
-    + assumption.
-    + assumption.
-  - now apply Hbounded.
+  unfold Bounded, incl. intros m m' f Hincl Hbounded l a Hin.
+  apply Hincl in Hin. now apply Hbounded in Hin.
 Qed.
 
 Lemma l_eval_some_in: forall (m: PA) (l: Lit) (b: bool), 
@@ -468,16 +455,15 @@ Proof.
       * apply (bounded_incl m') in Hbounded.
         -- assumption.
         -- apply incl_tl. apply incl_refl.
-      * assert (In l (map fst (m' ++d l))).
+      * assert (In (l, dec) (m' ++d l)).
         -- now left.
-        -- apply Hbounded in H. destruct H. destruct H. unfold Bounded. intros.
-           simpl in H1. destruct H1.
-          ++ subst l0. exists x. split.
-            ** assumption.
-            ** destruct H0.
-              --- right. now rewrite Neg.involutive.
-              --- now left.
-          ++ now apply Hbounded' in H1.
+        -- apply Hbounded in H as [c [Hc_in_f [Hl_in_c|Hnegl_in_c]]].
+          ++ intros l' a' Hin. inversion Hin.
+            ** injection H as <- <-. exists c. rewrite Neg.involutive. intuition.
+            ** now apply Hbounded' in H.
+          ++ intros l' a' Hin. inversion Hin.
+            ** injection H as <- <-. exists c. intuition.
+            ** now apply Hbounded' in H.
     + apply incl_appr. apply incl_refl.
 Qed.
 
