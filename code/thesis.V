@@ -1,7 +1,5 @@
 From Equations Require Import Equations.
-Require Import Coq.Arith.PeanoNat.
-Require Import Coq.Bool.Bool.
-From Stdlib Require Import Arith List Relations Wellfounded Lia.
+From Stdlib Require Import Nat Bool Arith List Relations Wellfounded Lia.
 Import ListNotations.
 
 Open Scope bool_scope.
