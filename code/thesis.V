@@ -1243,7 +1243,14 @@ Lemma pigeon: forall (l: list nat) (m: nat),
   NoDup l ->
   (forall (n: nat), In n l -> n <= m) ->
   length l <= S m.
-Proof. Admitted.
+Proof.
+  intros l m Hnodup Hin_le.
+  assert (Hincl: incl l (seq 0 (S m))).
+  - unfold incl. intros n Hin. apply in_seq. specialize (Hin_le n Hin). lia.
+  - apply (@NoDup_incl_length _ _ (seq 0 (S m))) in Hnodup.
+    + now rewrite length_seq in Hnodup.
+    + assumption.
+Qed.
 
 Lemma wf_length_le: forall (m: PA) (f: CNF),
   WellFormed m f ->
