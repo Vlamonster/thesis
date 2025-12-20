@@ -1302,14 +1302,32 @@ Qed.
 Lemma prefix_repeat: forall (l1 l2: list nat) (m n x x': nat),
   (forall (k: nat), In k l1 -> k <= n) ->
   (forall (k: nat), In k l2 -> k <= n) ->
+  length l1 + x  <= m ->
+  length l2 + x' <= m ->
   PrefixLt m l1 l2 -> PrefixLt m (l1 ++ repeat n x) (l2 ++ repeat n x').
-Proof. Admitted.
+Proof.
+  intros. induction H3.
+  - simpl. apply p_head.
+    + simpl. rewrite length_app. rewrite repeat_length. simpl in H1. lia.
+    + simpl. rewrite length_app. rewrite repeat_length. simpl in H2. lia.
+    + assumption.
+  - simpl. apply p_tail.
+    + simpl. simpl in H1. rewrite length_app. rewrite repeat_length. lia.
+    + simpl. simpl in H2. rewrite length_app. rewrite repeat_length. lia.
+    + apply IHPrefixLt.
+      * intros. apply H. now right.
+      * intros. apply H0. now right.
+      * simpl in H1. lia.
+      * simpl in H2. lia.
+Qed.
 
 Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
   WellFormed (m ++p l) f ->
   PrefixLt (max_atom_f f) (score (m ++p l) f) (score m f).
 Proof.
   intros m f l Hwf. simp score. simpl. apply prefix_repeat.
+  - admit.
+  - admit.
   - admit.
   - admit.
   - admit.
@@ -1320,6 +1338,8 @@ Lemma prefix_app: forall (m n: PA) (f: CNF) (l l': Lit),
   PrefixLt (max_atom_f f) (score (m ++p l) f) (score (m ++d l' ++a n) f).
 Proof.
   intros m n f l l' Hlt. simp score. simpl. apply prefix_repeat.
+  + admit.
+  + admit.
   + admit.
   + admit.
   + admit.
