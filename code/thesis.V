@@ -1264,15 +1264,28 @@ Proof.
   - simpl. lia.
 Qed.
 
-Lemma score_aux_le: forall (m: PA) (f: CNF) (l: Lit) (n: nat),
+Lemma score_aux_length_le: forall (m: PA) (f: CNF) (l: Lit) (n x: nat),
   WellFormed (m ++d l) f ->
-  length (score_aux m n 0) <= S (max_atom_f f).
+  length (score_aux m n x) <= S (max_atom_f f).
 Proof.
   intros. 
-  pose proof (score_aux_length m n 0).
-  pose proof (score_aux_length (m ++d l) n 0).
+  pose proof (score_aux_length m n x).
+  pose proof (score_aux_length (m ++d l) n x).
   pose proof (wf_length_le (m ++d l) f H).
   simpl in *. lia.
+Qed.
+
+Lemma score_aux_in_le: forall (m: PA) (n x k: nat),
+  In k (score_aux m n x) -> k <= n.
+Proof.
+  intros m n x k Hin. funelim (score_aux m n x).
+  - simp score_aux in Hin. inversion Hin.
+    + lia.
+    + inversion H.
+  - rewrite <- Heqcall in Hin. inversion Hin.
+    + lia.
+    + now apply H.
+  - rewrite <- Heqcall in Hin. now apply H.
 Qed.
 
 Lemma score_dec: forall (m: PA) (f: CNF) (l: Lit),
@@ -1285,7 +1298,8 @@ Proof.
   - reflexivity.
   - destruct n.
     + simp pad. now rewrite Nat.sub_0_r.
-    + rewrite length_rev in G. pose proof (score_aux_le m f l (S (max_atom_f f)) H).
+    + rewrite length_rev in G. 
+      pose proof (score_aux_length_le m f l (S (max_atom_f f)) 0 H).
       assert (T: S (max_atom_f f - S n) = max_atom_f f - n).
       * lia.
       * now rewrite <- T.
@@ -1327,8 +1341,8 @@ Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
   PrefixLt (max_atom_f f) (score (m ++p l) f) (score m f).
 Proof.
   intros m f l Hwf. simp score. simpl. apply prefix_repeat.
-  - admit.
-  - admit.
+  - intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
+  - intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
   - admit.
   - admit.
   - admit.
@@ -1339,8 +1353,8 @@ Lemma prefix_app: forall (m n: PA) (f: CNF) (l l': Lit),
   PrefixLt (max_atom_f f) (score (m ++p l) f) (score (m ++d l' ++a n) f).
 Proof.
   intros m n f l l' Hlt. simp score. simpl. apply prefix_repeat.
-  + admit.
-  + admit.
+  + intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
+  + intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
   + admit.
   + admit.
   + admit.
