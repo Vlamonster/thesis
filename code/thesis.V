@@ -1368,18 +1368,18 @@ Proof.
   - intros. simp score_aux. simpl. destruct x eqn:Heq.
     * apply prefix_prefix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-          rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. simpl. lia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-          rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. simpl. lia.
       -- apply p_head.
         ++ simpl. lia.
         ++ simpl. lia.
         ++ lia.
     * apply prefix_prefix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-          rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. simpl. lia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-          rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. simpl. lia.
       -- apply p_head.
         ++ simpl. lia.
         ++ simpl. lia.
