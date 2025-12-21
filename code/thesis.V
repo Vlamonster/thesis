@@ -11,7 +11,7 @@ Module Atom.
   Definition eqb := Nat.eqb.
 
   Declare Scope atom_scope.
-  Notation "l1 =? l2" := (eqb l1 l2) (at level 70): atom_scope.
+  Infix "=?" := eqb (at level 70): atom_scope.
   Open Scope atom_scope.
 
   Lemma eqb_refl: forall (p: Atom), p =? p = true.
@@ -40,7 +40,7 @@ Module Lit.
   extract (Neg p) := p.
 
   Declare Scope lit_scope.
-  Notation "l1 =? l2" := (eqb l1 l2) (at level 70): lit_scope.
+  Infix "=?" := eqb (at level 70): lit_scope.
   Open Scope lit_scope.
 
   Lemma eqb_refl: forall (l: Lit), l =? l = true.
@@ -122,13 +122,6 @@ Module Evaluation.
     | true, _    := Some true
     | _   , true := Some false
     | _   , _    := l_eval m l.
-
-  Equations l_ann (m: PA) (l: Lit): option Ann :=
-  l_ann [] _ := None;
-  l_ann ((l', a) :: m) l with l =? l', l =? ¬l' :=
-    | true, _    := Some a
-    | _   , true := Some a
-    | _   , _    := l_ann m l.
 
   Equations c_eval (m: PA) (c: Clause): option bool :=
   c_eval m [] := Some false;
@@ -1532,6 +1525,13 @@ Module Satisfiability.
 End Satisfiability.
 
 (*
+Equations l_ann (m: PA) (l: Lit): option Ann :=
+l_ann [] _ := None;
+l_ann ((l', a) :: m) l with l =? l', l =? ¬l' :=
+  | true, _    := Some a
+  | _   , true := Some a
+  | _   , _    := l_ann m l.
+
 Equations option_bind {A B: Type} (f: A -> option B) (o: option A): option B :=
 option_bind _ None     := None;
 option_bind f (Some a) := f a.
