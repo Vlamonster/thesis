@@ -1329,7 +1329,7 @@ Proof.
       * simpl in Hle_l2. lia.
 Qed.
 
-Lemma prefix_prefix: forall (m1 m2 n: list nat) (x: nat),
+Lemma prefix_postfix: forall (m1 m2 n: list nat) (x: nat),
   length (m1 ++a n) <= x ->
   length (m2 ++a n) <= x ->
   PrefixLt x m1 m2 ->
@@ -1366,7 +1366,7 @@ Proof.
       * simpl. lia.
       * lia.
   - intros. simp score_aux. simpl. destruct x eqn:Heq.
-    * apply prefix_prefix.
+    * apply prefix_postfix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
          rewrite length_app. rewrite length_rev. simpl. lia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
@@ -1375,7 +1375,7 @@ Proof.
         ++ simpl. lia.
         ++ simpl. lia.
         ++ lia.
-    * apply prefix_prefix.
+    * apply prefix_postfix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
          rewrite length_app. rewrite length_rev. simpl. lia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
@@ -1387,6 +1387,41 @@ Proof.
   - intros. simp score_aux. apply IH.
     * now apply wf_cons__wf in Hwf.
     * simpl in Hle. lia.
+Qed.
+
+Lemma prefix_prefix: forall (m1 m2 n: list nat) (x: nat),
+  length (n ++a m2) <= x ->
+  PrefixLt x m1 m2 ->
+  PrefixLt x m1 (n ++a m2).
+Proof.
+  intros m1 m2. generalize dependent m1.
+  induction m2.
+  - intros m1 n x Hle Hlt. inversion Hlt.
+  - intros m1 n x Hle Hlt. destruct m1.
+    + inversion Hlt.
+    + simpl. inversion Hlt.
+      * apply p_head.
+        -- assumption.
+        -- assumption.
+        -- assumption.
+      * apply p_tail.
+        -- assumption.
+        -- assumption.
+        -- apply IHm2.
+          ++ rewrite length_app in *. simpl in Hle. lia.
+          ++ assumption.
+Qed.
+
+Lemma score_aux_split: forall (m1 m2: PA) (l: Lit) (n x: nat),
+  rev (score_aux (m1 ++d l ++a m2) n x) = rev ((score_aux m1 n 0) ++a (score_aux m2 n x)).
+Proof.
+  intros. f_equal.
+  generalize dependent x.
+  induction m2.
+  - intros. rewrite app_nil_l. simp score_aux. simpl. reflexivity.
+  - intros. simpl. destruct a. destruct a.
+    + simp score_aux. simpl. now rewrite IHm2.
+    + simp score_aux.
 Qed.
 
 Lemma prefix_prop: forall (m: PA) (f: CNF) (l: Lit),
@@ -1422,10 +1457,9 @@ Qed.
 Lemma prefix_app: forall (m n: PA) (f: CNF) (l l': Lit),
   WellFormed (m ++p l) f ->
   WellFormed (m ++d l' ++a n) f ->
-  PrefixLt (S (S (max_atom_f f))) (score (m ++p l) f) (score m f) ->
   PrefixLt (S (S (max_atom_f f))) (score (m ++p l) f) (score (m ++d l' ++a n) f).
 Proof.
-  intros m n f l l' Hwf Hwf' Hlt. simp score. simpl. apply prefix_repeat.
+  intros m n f l l' Hwf Hwf'. simp score. simpl. apply prefix_repeat.
   - intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
   - intros. rewrite <- in_rev in H. now apply score_aux_in_le in H.
   - repeat rewrite length_rev.
@@ -1444,8 +1478,16 @@ Proof.
       * pose proof (score_aux_length (m ++d l' ++a n) (S (max_atom_f f)) 0).
         pose proof (wf_length_le (m ++d l' ++a n) f Hwf').
         simpl in *. lia.
-  - admit.
-Admitted.
+  - rewrite score_aux_split. rewrite rev_app_distr. simp score_aux. apply prefix_prefix.
+    + rewrite length_app. repeat rewrite length_rev.
+      apply wf_length_le in Hwf'. rewrite length_app in Hwf'. simpl in Hwf'.
+      pose proof (score_aux_length m (S (max_atom_f f)) 0).
+      pose proof (score_aux_length n (S (max_atom_f f)) 0).
+      lia.
+    + apply prefix_shift.
+      * now apply wf_cons__wf in Hwf.
+      * apply wf_length_le in Hwf. simpl in Hwf. lia.
+Qed.
 
 Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State) (Hwf: WellFormed m f),
   state m f Hwf ==> s' -> state m f Hwf >>[f] s'.
@@ -1471,7 +1513,6 @@ Proof.
     apply prefix_app.
     + assumption.
     + now rewrite H0.
-    + now apply prefix_prop.
 Qed.
 
 Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
