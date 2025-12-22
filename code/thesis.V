@@ -4,6 +4,8 @@ Import ListNotations.
 
 Open Scope bool_scope.
 
+Ltac slia := simpl in *; lia.
+
 Module Atom.
   (* Atoms are propositional symbols mapped to the naturals. *)
   Definition Atom: Type := nat.
@@ -272,8 +274,7 @@ Proof.
         -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
         -- simp extract in H2. subst p0. simp neg in Heq. now rewrite eqb_refl in Heq.
         -- simp extract in H2. subst p0. now rewrite eqb_refl in Heq0.
-      * apply (H m l).
-        -- assumption.
+      * apply (H m l dec).
         -- now inversion H0.
         -- congruence.
         -- assumption.
@@ -363,7 +364,7 @@ Lemma split_decomp: forall (m m': PA) (l': Lit),
 Proof.
   unfold NoDecisions. unfold not. intros. funelim (split_last_decision m).
   - discriminate.
-  - rewrite <- Heqcall in H. injection H as H. subst. exists []. split.
+  - rewrite <- Heqcall in H. injection H as <- <-. exists []. split.
     + reflexivity.
     + intros. destruct H. destruct H.
   - rewrite <- Heqcall in H0. destruct (H m' l' H0). destruct H1. rewrite H1. exists (x ++p l). split.
@@ -422,7 +423,7 @@ Proof.
       simp l_eval in H. rewrite eqb_refl in H. rewrite Neg.self_neqb_neg in H. discriminate.
   - intuition.
     + simp l_eval. rewrite <- Neg.eqb_compat. rewrite Heq0. rewrite Neg.eqb_compat in Heq.
-      rewrite Neg.involutive in Heq. rewrite Heq. simpl. assumption.
+      rewrite Neg.involutive in Heq. now rewrite Heq.
     + autorewrite with l_eval in H. rewrite <- Neg.eqb_compat in H. rewrite Heq0 in H.
       rewrite Neg.eqb_compat in Heq. rewrite Neg.involutive in Heq. rewrite Heq in H. simpl in H. 
       apply H1. apply H.
@@ -437,10 +438,9 @@ Proof.
   - destruct Hwf as [Hnodup _]. apply (nodup_app__nodup (m' ++d l)) in Hnodup.
     assert (Hnodup': NoDuplicates m').
     + now apply (nodup_cons__nodup) in Hnodup.
-    + apply nodup_cons__undef in Hnodup. apply undef__neg_undef in Hnodup.
-      apply nodup_cons.
-      * assumption.
-      * assumption.
+    + apply nodup_cons__undef in Hnodup as Hundef. 
+      apply undef__neg_undef in Hundef.
+      apply (nodup_cons _ _ _ Hnodup' Hundef).
   - destruct Hwf as [_ Hbounded]. apply (bounded_incl (m' ++d l)) in Hbounded.
     + assert (Hbounded': Bounded m' f).
       * apply (bounded_incl m') in Hbounded.
@@ -469,10 +469,10 @@ Proof.
       * simp c_eval in H. rewrite G1 in H. simpl in H. destruct (c_eval m c) eqn:G2.
         -- destruct b; discriminate.
         -- apply IHc in H. destruct H. destruct H. exists x. split.
-          ++ right. assumption.
+          ++ now right.
           ++ assumption.
     + exists a. split.
-      * left. reflexivity.
+      * now left.
       * assumption.
 Qed.
 
@@ -503,11 +503,11 @@ Proof.
   pose proof (c_eval_none__l_eval_none m c H).
   pose proof (c_eval_false__l_eval_false m (l_remove c l) H0).
   destruct H1. destruct H1. destruct (x =? l) eqn:G.
-  - apply eqb_eq in G. subst. assumption.
+  - now apply eqb_eq in G as ->.
   - pose proof (H2 x). assert (In x (l_remove c l)).
     + simp l_remove. rewrite filter_In. split.
       * assumption.
-      * rewrite eqb_sym. rewrite G. reflexivity.
+      * rewrite eqb_sym. now rewrite G.
     + apply H4 in H5. congruence. 
 Qed.
 
@@ -515,7 +515,7 @@ Lemma find_unit_l_l_in_c: forall (m: PA) (c: Clause) (l: Lit),
   find_unit_l m c = Some l -> In l c.
 Proof.
   intros. funelim (find_unit_l m c). rewrite H in Heqcall. 
-  apply find_some in Heqcall. destruct Heqcall. assumption.
+  apply find_some in Heqcall. intuition.
 Qed.
 
 Lemma find_unit_l_in_c: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
@@ -523,9 +523,9 @@ Lemma find_unit_l_in_c: forall (m: PA) (f: CNF) (c: Clause) (l: Lit),
 Proof. 
   intros. funelim (find_unit m f).
   - congruence.
-  - apply H. rewrite <- H0. assumption.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. 
-    apply (find_unit_l_l_in_c m c0 l0). assumption.
+  - apply H. congruence.
+  - rewrite H in Heqcall. injection Heqcall as <- <-.
+    now apply find_unit_l_l_in_c in Heq.
   - apply H. congruence.
 Qed.
 
@@ -535,7 +535,7 @@ Proof.
   intros. funelim (find_unit m f).
   - congruence.
   - right. apply (H c0 l0). congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. left. reflexivity.
+  - rewrite H in Heqcall. injection Heqcall as <- <-. now left.
   - right. apply (H c0 l). congruence.
 Qed.
 
@@ -550,7 +550,7 @@ Proof.
     destruct Heq. simp is_conflict in H1. destruct (c_eval m (l_remove c l)) eqn:G.
     + destruct b.
       * discriminate.
-      * apply (undef_remove_false__undef m c l); assumption.
+      * apply (undef_remove_false__undef _ _ _ Heq0 G).
     + discriminate.
   - rewrite H0 in Heqcall. now apply H in Heqcall.
 Qed.
@@ -646,7 +646,7 @@ next_state (state m f Hwf) :=
   end end end.
 
 Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
-Proof. intros. simp find_conflict in H. apply find_some in H as [H _]. assumption. Qed.
+Proof. intros. simp find_conflict in H. now apply find_some in H. Qed.
 
 Lemma find_conflict_conflicting: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> Conflicting m c.
 Proof. 
@@ -663,8 +663,7 @@ Proof.
   - discriminate.
   - destruct H1. destruct H1.
     + discriminate.
-    + apply (H m).
-      * assumption.
+    + apply (H m H0).
       * now exists x.
       * reflexivity.
       * reflexivity.
@@ -676,9 +675,9 @@ Proof.
   unfold Conflicting. intros. funelim (find_unit m f).
   - discriminate.
   - apply H. congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst.
-    funelim (find_unit_l m c0). rewrite Heq in Heqcall. apply find_some in Heqcall.
-    destruct Heqcall. funelim (is_conflict m (l_remove c l0)).
+  - rewrite H in Heqcall. injection Heqcall as <- <-.
+    funelim (find_unit_l m c). rewrite Heq in Heqcall. apply find_some in Heqcall.
+    destruct Heqcall. funelim (is_conflict m (l_remove c l)).
     + congruence.
     + assumption.
     + congruence.
@@ -691,11 +690,11 @@ Proof.
   unfold Undef. intros. funelim (find_unit m f).
   - discriminate.
   - apply (H c0 l0). congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst. funelim (find_unit_l m c0).
+  - rewrite H in Heqcall. injection Heqcall as <- <-. funelim (find_unit_l m c).
     rewrite Heq in Heqcall. apply find_some in Heqcall. destruct Heqcall.
-    funelim (is_conflict m (l_remove c l0)).
+    funelim (is_conflict m (l_remove c l)).
     + congruence.
-    + apply (undef_remove_false__undef m c0 l0); assumption.
+    + apply (undef_remove_false__undef _ _ _ Heq1 Heq).
     + congruence.
   - apply (H c0 l). congruence.
 Qed.
@@ -705,19 +704,19 @@ Lemma find_decision_decomp: forall (m: PA) (f: CNF) (l: Lit),
 Proof.
   intros. funelim (find_decision m f).
   - congruence.
-  - rewrite H in Heqcall. injection Heqcall as Heqcall. subst l0. exists c. split.
+  - rewrite H in Heqcall. injection Heqcall as <-. exists c. split.
     + assumption.
-    + left. reflexivity.
+    + now left.
   - rewrite H in Heqcall. apply Hind in Heqcall. destruct Heqcall. destruct H0.
     exists x. split.
     + assumption.
-    + right. assumption.
+    + now right.
 Qed.
 
 Lemma find_undef_l_in_c: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> In l c.
 Proof.
   intros. funelim (find_undef_l m c). rewrite H in Heqcall. 
-  apply find_some in Heqcall. destruct Heqcall. assumption.
+  apply find_some in Heqcall. now destruct Heqcall.
 Qed.
 
 Lemma find_undef_l_undef: forall (m: PA) (c: Clause) (l: Lit), find_undef_l m c = Some l -> Undef m l.
@@ -860,7 +859,7 @@ Proof.
   unfold Final. unfold not. intros. split.
   - intros. destruct H0. apply next_state_exists in H0. destruct H0. congruence.
   - intros. destruct (next_state s) eqn:G.
-    + apply next_state_sound in G. exfalso. apply H. exists s0. assumption.
+    + apply next_state_sound in G. exfalso. apply H. now exists s0.
     + reflexivity.
 Qed.
 
@@ -952,21 +951,15 @@ Lemma bcll__prefix_lt: forall (x: nat) (m m': list nat),
 Proof.
   intros. split.
   - intros. inversion H as [H1 [H2 H3]]. induction H3.
-    + apply p_head.
-      * assumption.
-      * assumption.
-      * assumption.
-    + apply p_tail.
-      * assumption.
-      * assumption.
-      * apply IHcll.
-        -- unfold bcll. split.
-          ++ simpl in H1. apply le_S in H1. now apply le_S_n.
-          ++ split. 
-            ** simpl in H2. apply le_S in H2. now apply le_S_n.
-            ** assumption.
-        -- simpl in H1. apply le_S in H1. now apply le_S_n.
-        -- simpl in H2. apply le_S in H2. now apply le_S_n.
+    + apply (p_head _ _ _ _ _ H1 H2 H0).
+    + apply (p_tail _ _ _ _ H1 H2). apply IHcll.
+      * unfold bcll. split.
+        -- slia.
+        -- split. 
+          ++ slia.
+          ++ assumption.
+      * slia.
+      * slia.
   - intros. 
     + induction H.
       * unfold bcll. split.
@@ -1005,7 +998,7 @@ Proof.
   induction x.
   - intros l. constructor. intros [] [H1 [H2 H3]].
     + inversion H3.
-    + simpl in H1; lia.
+    + slia.
   - apply (wf_incl _ _ (fun l1 l2 => bcll' x l1 l2)).
     + red. apply cll_incl.
     + unfold bcll'.
@@ -1076,26 +1069,20 @@ Proof.
   intros. split.
   - intros. induction H1.
     + apply p_head.
-      * now apply le_S in H1.
-      * now apply le_S in H2.
+      * slia.
+      * slia.
       * assumption.
     + apply p_tail.
-      * now apply le_S in H1.
-      * now apply le_S in H2.
+      * slia.
+      * slia.
       * apply IHPrefixLt.
-        -- apply le_S in H1. now apply le_S_n.
-        -- apply le_S in H2. now apply le_S_n.
+        -- slia.
+        -- slia.
   - intros. induction H1.
-    + apply p_head.
-      * assumption.
-      * assumption.
-      * assumption.
-    + apply p_tail.
-      * assumption.
-      * assumption.
-      * apply IHPrefixLt.
-        -- now apply le_S_n.
-        -- now apply le_S_n. 
+    + apply (p_head _ _ _ _ _ H H0 H3).
+    + apply (p_tail _ _ _ _ H H0). apply IHPrefixLt.
+      * slia.
+      * slia.
 Qed.
 
 Lemma prefix_lt_refl: forall (x: nat) (m m': list nat), 
@@ -1117,15 +1104,15 @@ Proof.
     + intros. rewrite Heqcall in H0. simp prefix_lt in H0. destruct (n <? n') eqn:G.
       * apply p_head.
         -- apply andb_true_iff in H0 as [H1 H2]. apply andb_true_iff in H1 as [H1 H3].
-           simpl. apply le_n_S. now apply Nat.leb_le.
+           apply Nat.leb_le in H1. slia.
         -- apply andb_true_iff in H0 as [H1 H2]. apply andb_true_iff in H1 as [H1 H3].
-           simpl. apply le_n_S. now apply Nat.leb_le.
+           apply Nat.leb_le in H3. slia.
         -- now apply Nat.ltb_lt.
       * simpl in H0. apply andb_true_iff in H0 as [H1 H2].
         apply andb_true_iff in H1 as [H1 H3]. apply andb_true_iff in H2 as [H2 H4].
         rewrite Nat.eqb_eq in H2. subst n'. apply p_tail.
-        -- simpl. apply le_n_S. now apply Nat.leb_le.
-        -- simpl. apply le_n_S. now apply Nat.leb_le.
+        -- apply Nat.leb_le in H1. slia.
+        -- apply Nat.leb_le in H3. slia.
         -- apply H in H4. rewrite <- prefix_step.
           ++ assumption.
           ++ now apply Nat.leb_le.
@@ -1251,9 +1238,9 @@ Lemma score_aux_length: forall (m: PA) (n n': nat),
   length (score_aux m n n') <= S (length m).
 Proof.
   intros. funelim (score_aux m n n').
-  - simpl. apply le_n.
-  - simpl. now apply le_n_S.
-  - simpl. lia.
+  - slia.
+  - slia.
+  - slia.
 Qed.
 
 Lemma score_aux_length_le: forall (m: PA) (f: CNF) (l: Lit) (a: Ann) (n x: nat),
@@ -1264,7 +1251,7 @@ Proof.
   pose proof (score_aux_length m n x).
   pose proof (score_aux_length (m ++d l) n x).
   pose proof (wf_length_le ((l, a) :: m) f H).
-  simpl in *. lia.
+  slia.
 Qed.
 
 Lemma score_aux_in_le: forall (m: PA) (n x k: nat),
@@ -1324,8 +1311,8 @@ Proof.
     + apply IH.
       * intros. apply Hin_l1. now right.
       * intros. apply Hin_l2. now right.
-      * simpl in Hle_l1. lia.
-      * simpl in Hle_l2. lia.
+      * slia.
+      * slia.
 Qed.
 
 Lemma prefix_postfix: forall (m1 m2 n: list nat) (x: nat),
@@ -1357,35 +1344,35 @@ Proof.
   induction m as [|[l [|]] m IH].
   - intros. simp score_aux. simpl. destruct x eqn:Heq.
     + apply p_head.
-      * simpl. lia.
-      * simpl. lia.
+      * slia.
+      * slia.
       * lia.
     + apply p_head.
-      * simpl. lia.
-      * simpl. lia.
+      * slia.
+      * slia.
       * lia.
   - intros. simp score_aux. simpl. destruct x eqn:Heq.
     * apply prefix_postfix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-         rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. slia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-         rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. slia.
       -- apply p_head.
-        ++ simpl. lia.
-        ++ simpl. lia.
+        ++ slia.
+        ++ slia.
         ++ lia.
     * apply prefix_postfix.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-         rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. slia.
       -- pose proof (score_aux_length_le m f l dec (S (max_atom_f f)) 0 Hwf).
-         rewrite length_app. rewrite length_rev. simpl. lia.
+         rewrite length_app. rewrite length_rev. slia.
       -- apply p_head.
-        ++ simpl. lia.
-        ++ simpl. lia.
+        ++ slia.
+        ++ slia.
         ++ lia.
   - intros. simp score_aux. apply IH.
     * now apply wf_cons__wf in Hwf.
-    * simpl in Hle. lia.
+    * slia.
 Qed.
 
 Lemma prefix_prefix: forall (m1 m2 n: list nat) (x: nat),
@@ -1407,7 +1394,7 @@ Proof.
         -- assumption.
         -- assumption.
         -- apply IHm2.
-          ++ rewrite length_app in *. simpl in Hle. lia.
+          ++ rewrite length_app in *. slia.
           ++ assumption.
 Qed.
 
@@ -1439,7 +1426,7 @@ Proof.
       * lia.
       * pose proof (score_aux_length (m ++p l) (S (max_atom_f f)) 0).
         pose proof (wf_length_le (m ++p l) f Hwf) .
-        simpl in *. lia.
+        slia.
   - repeat rewrite length_rev.
     destruct (length (score_aux m (S (max_atom_f f)) 0)) eqn:Heq.
     + lia.
@@ -1447,10 +1434,10 @@ Proof.
       * lia.
       * pose proof (score_aux_length m (S (max_atom_f f)) 0).
         pose proof (wf_length_le m f Hwf').
-        simpl in *. lia.
+        slia.
   - simp score_aux. apply prefix_shift.
     + assumption.
-    + apply wf_length_le in Hwf. simpl in Hwf. lia.
+    + apply wf_length_le in Hwf. slia.
 Qed.
 
 Lemma prefix_app: forall (m n: PA) (f: CNF) (l l': Lit),
@@ -1468,7 +1455,7 @@ Proof.
       * lia.
       * pose proof (score_aux_length (m ++p l) (S (max_atom_f f)) 0).
         pose proof (wf_length_le (m ++p l) f Hwf) .
-        simpl in *. lia.
+        slia.
   - repeat rewrite length_rev.
     destruct (length (score_aux (m ++d l' ++a n) (S (max_atom_f f)) 0)) eqn:Heq.
     + lia.
@@ -1476,7 +1463,7 @@ Proof.
       * lia.
       * pose proof (score_aux_length (m ++d l' ++a n) (S (max_atom_f f)) 0).
         pose proof (wf_length_le (m ++d l' ++a n) f Hwf').
-        simpl in *. lia.
+        slia.
   - rewrite score_aux_split. rewrite rev_app_distr. simp score_aux. apply prefix_prefix.
     + rewrite length_app. repeat rewrite length_rev.
       apply wf_length_le in Hwf'. rewrite length_app in Hwf'. simpl in Hwf'.
@@ -1516,7 +1503,7 @@ Qed.
 
 Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
   next_state (state m f Hwf) = Some s' -> state m f Hwf >>[f] s'.
-Proof. intros. apply trans__state_lt. apply next_state_sound. assumption. Qed.
+Proof. intros. apply trans__state_lt. now apply next_state_sound. Qed.
 
 Lemma next_state_options: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
   next_state (state m f Hwf) = None \/
@@ -1525,7 +1512,7 @@ Lemma next_state_options: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
 Proof.
   intros. funelim (next_state (state m f Hwf)).
   - left. reflexivity.
-  - injection eqargs as eqargs. subst m0 f0. rewrite Heqcall. destruct (find_conflict m f).
+  - injection eqargs as <- <-. rewrite Heqcall. destruct (find_conflict m f).
     + destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
       -- right. right. now exists (m_split ++p ¬l_split), ((wf_backtrack m m_split f l_split Hsplit Hwf)).
       -- right. now left.
@@ -1551,8 +1538,10 @@ Proof.
   - intros. congruence.
   - intros. destruct y, z; try congruence.
     + inversion H.
-    + subst. injection Heqs' as Heqs'. subst. apply trans_same_formula in H. subst.
-      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m) (Hwf':=Hwf0) (Hwf:=Hwf). reflexivity. reflexivity.
+    + subst. injection Heqs' as <- <-. apply trans_same_formula in H as <-.
+      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m) (Hwf':=Hwf0) (Hwf:=Hwf).
+      * reflexivity.
+      * reflexivity.
 Qed.
 
 Lemma initial_wf: forall (f: CNF), WellFormed [] f.
@@ -1582,9 +1571,7 @@ Section solve.
       + rewrite ns in G. injection G as ->. now constructor.
       + rewrite ns in G. destruct G. destruct H0. injection H0 as ->.
         apply next_state_sound in ns. assert (state [] f (initial_wf f) ==>* state x f0 x0).
-        * apply (rt_trans _ _ _ (state m f0 Hwf)).
-          -- assumption.
-          -- now apply rt_step.
+        * apply (rt_trans _ _ _ (state m f0 Hwf) _ H). now apply rt_step.
         * apply trans_clos_same_formula in H0. subst f0. now apply trans__state_lt.
   Qed.
 
