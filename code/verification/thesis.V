@@ -176,7 +176,7 @@ Module Trans.
 
   Inductive State: Type :=
   | fail
-  | state (m: PA) (f: CNF) (Hwf: WellFormed m f).
+  | state (m: PA) (f: CNF).
 
   (* Propositions used in the transition relation `==>`. *)
   Definition NoDecisions (m: PA): Prop := ~ exists (l: Lit), In (l, dec) m.
@@ -184,30 +184,34 @@ Module Trans.
 
   Inductive Trans: relation State :=
   (* Fail if all literals are assigned and there is a conflict. *)
-  | t_fail (m: PA) (f: CNF) (c: Clause) (Hwf: WellFormed m f):
+  | t_fail (m: PA) (f: CNF) (c: Clause):
+    WellFormed m f ->
     In c f ->
     Conflicting m c ->
     NoDecisions m ->
-    Trans (state m f Hwf) fail
+    Trans (state m f) fail
   (* If a clause is false except for one unassigned literal, assign it to satisfy the clause. *)
-  | t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed m f) (Hwf': WellFormed (m ++p l) f):
+  | t_unit (m: PA) (f: CNF) (c: Clause) (l: Lit):
+    WellFormed m f ->
     In l c ->
     In c f ->
     Conflicting m (l_remove c l) ->
     Undef m l ->
-    Trans (state m f Hwf) (state (m ++p l) f Hwf')
+    Trans (state m f) (state (m ++p l) f)
   (* Arbitrarily set an unassigned literal in the formula to true. *)
-  | t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed m f) (Hwf': WellFormed (m ++d l) f):
+  | t_decide (m: PA) (f: CNF) (c: Clause) (l: Lit):
+    WellFormed m f ->
     In l c \/ In (¬l) c ->
     In c f ->
     Undef m l ->
-    Trans (state m f Hwf) (state (m ++d l) f Hwf')
+    Trans (state m f) (state (m ++d l) f)
   (* Backtrack by flipping the most recent decision literal. *)
-  | t_backtrack (m n: PA) (f: CNF) (c: Clause) (l: Lit) (Hwf: WellFormed (m ++d l ++a n) f) (Hwf': WellFormed (m ++p ¬l) f):
+  | t_backtrack (m n: PA) (f: CNF) (c: Clause) (l: Lit):
+    WellFormed (m ++d l ++a n) f ->
     In c f ->
     Conflicting (m ++d l ++a n) c ->
     NoDecisions n ->
-    Trans (state (m ++d l ++a n) f Hwf) (state (m ++p ¬l) f Hwf').
+    Trans (state (m ++d l ++a n) f) (state (m ++p ¬l) f).
   
   (* The following is the reflexive-transitive closure of `==>`. *)
   Definition TransRTC: relation State := clos_refl_trans State Trans.
@@ -625,24 +629,24 @@ Qed.
 
 Equations next_state (s: State): option State :=
 next_state fail := None;
-next_state (state m f Hwf) :=
+next_state (state m f) :=
   match find_conflict m f with
   | Some c =>
-    match inspect (split_last_decision m) with
+    match split_last_decision m with
     (* t_fail *)
-    | None         eqn:Heq => Some fail
+    | None         => Some fail
     (* t_backtrack *)
-    | Some (m', l) eqn:Heq => Some (state (m' ++p ¬l) f (wf_backtrack m m' f l Heq Hwf))
+    | Some (m', l) => Some (state (m' ++p ¬l) f)
     end
-  | _      =>
+  | _              =>
   (* t_unit *)
-  match inspect (find_unit m f) with
-  | Some (c, l)    eqn:Heq => Some (state (m ++p l) f (wf_unit m f c l Heq Hwf))
-  | None           eqn:Heq =>
+  match find_unit m f with
+  | Some (c, l)    => Some (state (m ++p l) f)
+  | None           =>
   (* t_decide *)
-  match inspect (find_decision m f) with
-  | Some l         eqn:Heq => Some (state (m ++d l) f (wf_decide m f l Heq Hwf))
-  | None           eqn:Heq => None
+  match find_decision m f with
+  | Some l         => Some (state (m ++d l) f)
+  | None           => None
   end end end.
 
 Lemma find_conflict_c_in_f: forall (m: PA) (f: CNF) (c: Clause), find_conflict m f = Some c -> In c f.
@@ -727,36 +731,42 @@ Proof.
   - assumption.
 Qed.
 
-Lemma next_state_sound: forall (s s': State), next_state s = Some s' -> s ==> s'.
+Lemma next_state_sound: forall (m: PA) (f: CNF) (s': State),
+  WellFormed m f ->
+  next_state (state m f) = Some s' ->
+  state m f ==> s'.
 Proof.
-  intros. funelim (next_state s); rewrite H in Heqcall; clear H.
+  intros m f s' Hwf Hnext. funelim (next_state (state m f)); rewrite Hnext in Heqcall; clear Hnext.
   - discriminate.
-  - destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
-    + destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] split_last_decision].
+  - injection eqargs as <- <-.
+    destruct (find_conflict m f) as [c_conflict|] eqn:find_conflict.
+    + destruct (split_last_decision m) as [(m_split, l_split)|] eqn:split_last_decision.
       (* t_backtrack *)
       * injection Heqcall as <-.
         destruct (split_decomp _ _ _ split_last_decision) as [n_split [-> no_dec]].
-        apply (t_backtrack m_split n_split f c_conflict l_split).
+        apply (t_backtrack m_split n_split f c_conflict l_split Hwf).
         -- now apply (find_conflict_c_in_f (m_split ++d l_split ++a n_split) f c_conflict).
         -- now apply (find_conflict_conflicting (m_split ++d l_split ++a n_split) f c_conflict).
         -- assumption.
       (* t_fail *)
-      * injection Heqcall as <-. apply (t_fail m f c_conflict).
+      * injection Heqcall as <-.
+        apply (t_fail m f c_conflict Hwf).
         -- now apply (find_conflict_c_in_f m f c_conflict).
         -- now apply (find_conflict_conflicting m f c_conflict).
         -- now apply (no_split__no_decision m).
-    + destruct (inspect (find_unit m f)) as [[(c_unit, l_unit)|] find_unit].
+    + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:find_unit.
       (* t_unit *)
-      * injection Heqcall as <-. apply (t_unit m f c_unit l_unit).
+      * injection Heqcall as <-.
+        apply (t_unit m f c_unit l_unit Hwf).
         -- now apply (find_unit_l_in_c m f c_unit l_unit).
         -- now apply (find_unit_c_in_f m f c_unit l_unit).
         -- now apply (find_unit_conflicting m f c_unit l_unit).
         -- now apply (find_unit_undef m f c_unit l_unit).
-      * destruct (inspect (find_decision m f)) as [[l_decide|] find_decision].
+      * destruct (find_decision m f) as [l_decide|] eqn:find_decision.
         (* t_decide *)
         -- injection Heqcall as <-.
            destruct (find_decision_decomp m f l_decide find_decision) as [c_decide [Hc Hc_in_f]].
-           apply (t_decide m f c_decide l_decide).
+           apply (t_decide m f c_decide l_decide Hwf).
           ++ left. now apply (find_undef_l_in_c m c_decide l_decide).
           ++ assumption.
           ++ now apply (find_undef_l_undef m c_decide l_decide).
@@ -797,69 +807,71 @@ Proof.
   intros. inversion H as 
     [
       m f c_conflict Hwf Hc_in_f Hconflict Hno_dec |
-      m f c_unit l_unit Hwf Hwf' Hl_in_c Hc_in_f Hconflict Hundef |
-      m f c_decide l_decide Hwf Hwf' Hx_in_c Hc_in_f Hundef |
-      m_split n_split f c_conflict l_split Hwf Hwf' Hc_in_f Hconflict Hno_dec
+      m f c_unit l_unit Hwf Hl_in_c Hc_in_f Hconflict Hundef |
+      m f c_decide l_decide Hwf Hx_in_c Hc_in_f Hundef |
+      m_split n_split f c_conflict l_split Hwf Hc_in_f Hconflict Hno_dec
     ]; subst s s'.
   (* t_fail *)
-  - funelim (next_state (state m f Hwf)).
+  - funelim (next_state (state m f)).
     + discriminate.
     + injection eqargs as <- <-.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
-      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
-        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+      * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+        -- now exists (state (m_split ++p (¬l_split)) f).
         -- now exists fail.
       * destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
   (* t_unit *)
-  - funelim (next_state (state m f Hwf)).
+  - funelim (next_state (state m f)).
     + discriminate.
     + injection eqargs as <- <-.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
-      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
-        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+      * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+        -- now exists (state (m_split ++p (¬l_split)) f).
         -- now exists fail.
-      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
-        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
-        -- destruct (inspect (find_decision m f)) as [[l_decide|] Hfind_dec].
-          ++ now exists (state (m ++d l_decide) f (wf_decide m f l_decide Hfind_dec Hwf)).
+      * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m ++p l_unit') f).
+        -- destruct (find_decision m f) as [l_decide|] eqn:Hfind_dec.
+          ++ now exists (state (m ++d l_decide) f).
           ++ destruct (find_decision_exists m f c_unit l_unit Hl_in_c Hc_in_f Hundef). congruence.
   (* t_decide *)
-  - funelim (next_state (state m f Hwf)).
+  - funelim (next_state (state m f)).
     + discriminate.
     + injection eqargs as <- <-.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
-      * destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
-        -- now exists (state (m_split ++p (¬l_split)) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+      * destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+        -- now exists (state (m_split ++p (¬l_split)) f).
         -- now exists fail.
-      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
-        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
-        -- destruct (inspect (find_decision m f)) as [[l_decide'|] Hfind_dec].
-          ++ now exists (state (m ++d l_decide') f (wf_decide m f l_decide' Hfind_dec Hwf)).
+      * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m ++p l_unit') f).
+        -- destruct (find_decision m f) as [l_decide'|] eqn:Hfind_dec.
+          ++ now exists (state (m ++d l_decide') f).
           ++ destruct Hx_in_c as [Hl_in_c|Hnegl_in_c].
             ** destruct (find_decision_exists m f c_decide l_decide Hl_in_c Hc_in_f Hundef). congruence.
             ** apply undef__neg_undef in Hundef.
                destruct (find_decision_exists m f c_decide (¬l_decide) Hnegl_in_c Hc_in_f Hundef). congruence.
   (* t_backtrack *)
-  - funelim (next_state (state (m_split ++d l_split ++a n_split) f Hwf)).
+  - funelim (next_state (state (m_split ++d l_split ++a n_split) f)).
     + discriminate.
     + injection eqargs as ? <-. rewrite <- H0 in *. clear H0.
       destruct (find_conflict m f) as [c_conflict'|] eqn:Hfind_conflict.
-      * destruct (inspect (split_last_decision m)) as [[(m_split', l_split')|] Hsplit].
-        -- now exists (state (m_split' ++p (¬l_split')) f (wf_backtrack m m_split' f l_split' Hsplit Hwf)).
+      * destruct (split_last_decision m) as [(m_split', l_split')|] eqn:Hsplit.
+        -- now exists (state (m_split' ++p (¬l_split')) f).
         -- now exists fail.
-      * destruct (inspect (find_unit m f)) as [[(c_unit', l_unit')|] Hfind_unit].
-        -- now exists (state (m ++p l_unit') f (wf_unit m f c_unit' l_unit' Hfind_unit Hwf)).
-        -- destruct (inspect (find_decision m f)) as [[l_decide'|] Hfind_dec].
-          ++ now exists (state (m ++d l_decide') f (wf_decide m f l_decide' Hfind_dec Hwf)).
+      * destruct (find_unit m f) as [(c_unit', l_unit')|] eqn:Hfind_unit.
+        -- now exists (state (m ++p l_unit') f).
+        -- destruct (find_decision m f) as [l_decide'|] eqn:Hfind_dec.
+          ++ now exists (state (m ++d l_decide') f).
           ++ destruct (find_conflict_exists m f c_conflict Hc_in_f Hconflict). congruence.
 Qed.
 
-Lemma next_state_final_refl: forall (s: State), next_state s = None <-> Final s.
+Lemma next_state_final_refl: forall (m: PA) (f: CNF),
+  WellFormed m f ->
+  next_state (state m f) = None <-> Final (state m f).
 Proof.
-  unfold Final. unfold not. intros. split.
-  - intros. destruct H0. apply next_state_exists in H0. destruct H0. congruence.
-  - intros. destruct (next_state s) eqn:G.
-    + apply next_state_sound in G. exfalso. apply H. now exists s0.
+  unfold Final. unfold not. intros m f Hwf. split.
+  - intros Hnext [s Htrans]. apply next_state_exists in Htrans as [s' Hnext']. congruence.
+  - intros. destruct (next_state (state m f)) eqn:G.
+    + apply (next_state_sound _ _ _ Hwf) in G. exfalso. apply H. now exists s.
     + reflexivity.
 Qed.
 
@@ -914,8 +926,8 @@ Module ScoreExamples.
 End ScoreExamples.
 
 Inductive FailLt: relation State :=
-| f_fail (m: PA) (f: CNF) (Hwf: WellFormed m f):
-  FailLt fail (state m f Hwf).
+| f_fail (m: PA) (f: CNF):
+  FailLt fail (state m f).
 
 Lemma wf_fail_lt: well_founded FailLt.
 Proof.
@@ -1033,15 +1045,15 @@ Proof.
 Qed.
 
 Equations state_measure (s: State): list nat * nat :=
-state_measure fail          := ([]       , 0              );
-state_measure (state m f _) := (score m f, score_total m f).
+state_measure fail        := ([]       , 0              );
+state_measure (state m f) := (score m f, score_total m f).
 
 Definition StateLt (f: CNF): relation State := union _ FailLt (MR (StateLexLt f) state_measure).
 
 Lemma wf_state_lt: forall (f: CNF), well_founded (StateLt f).
 Proof.
   intros. apply wf_union.
-  - unfold commut. intros. inversion H. subst. exists (state m f0 Hwf).
+  - unfold commut. intros. inversion H. subst. exists (state m f0).
     + unfold MR in H0. simp state_measure in H0. inversion H0.
       * subst. inversion H3.
       * subst. inversion H3.
@@ -1475,75 +1487,6 @@ Proof.
       * apply wf_length_le in Hwf. simpl in Hwf. lia.
 Qed.
 
-Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State) (Hwf: WellFormed m f),
-  state m f Hwf ==> s' -> state m f Hwf >>[f] s'.
-Proof.
-  intros. inversion H as 
-    [
-      m' f' c_conflict Hwf' Hc_in_f Hconflict Hno_dec |
-      m' f' c_unit l_unit ? Hwf' Hl_in_c Hc_in_f Hconflict Hundef |
-      m' f' c_decide l_decide ? Hwf' Hx_in_c Hc_in_f Hundef |
-      m_split n_split f' c_conflict l_split ? Hwf' Hc_in_f Hconflict Hno_dec
-    ]; subst s'; try subst m'; try subst f'.
-  (* t_fail *)
-  - unfold StateLt. now left.
-  (* t_unit *)
-  - unfold StateLt. right. unfold MR. simp state_measure. apply left_slex.
-    now apply prefix_prop.
-  (* t_decide *)
-  - unfold StateLt. right. unfold MR. simp state_measure. rewrite score_dec.
-    + apply right_slex. now apply total_decide.
-    + assumption.
-  (* t_backtrack *)
-  - unfold StateLt. right. unfold MR. simp state_measure. rewrite <- H0. apply left_slex.
-    apply prefix_app.
-    + assumption.
-    + now rewrite H0.
-Qed.
-
-Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
-  next_state (state m f Hwf) = Some s' -> state m f Hwf >>[f] s'.
-Proof. intros. apply trans__state_lt. now apply next_state_sound. Qed.
-
-Lemma next_state_options: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
-  next_state (state m f Hwf) = None \/
-  next_state (state m f Hwf) = Some fail \/ 
-  exists (m': PA) (Hwf': WellFormed m' f), next_state (state m f Hwf) = Some (state m' f Hwf').
-Proof.
-  intros. funelim (next_state (state m f Hwf)).
-  - left. reflexivity.
-  - injection eqargs as <- <-. rewrite Heqcall. destruct (find_conflict m f).
-    + destruct (inspect (split_last_decision m)) as [[(m_split, l_split)|] Hsplit].
-      -- right. right. now exists (m_split ++p ¬l_split), ((wf_backtrack m m_split f l_split Hsplit Hwf)).
-      -- right. now left.
-    + destruct (inspect (find_unit m f)) as [[(c_unit, l_unit)|] Hfind_unit].
-      * right. right. now exists (m ++p l_unit), (wf_unit m f c_unit l_unit Hfind_unit Hwf).
-      * destruct (inspect (find_decision m f)) as [[l_dec|] Hfind_dec].
-        -- right. right. now exists (m ++d l_dec), (wf_decide m f l_dec Hfind_dec Hwf).
-        -- now left.
-Qed.
-
-Lemma trans_same_formula: forall (m m': PA) (f f': CNF) (Hwf: WellFormed m f) (Hwf': WellFormed m' f'), 
-  state m f Hwf ==> state m' f' Hwf' -> f = f'.
-Proof. intros. inversion H; subst; reflexivity. Qed.
-
-Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF) (Hwf: WellFormed m f) (Hwf': WellFormed m' f'), 
-  state m f Hwf ==>* state m' f' Hwf' -> f = f'.
-Proof. 
-  intros m m' f f' Hwf Hwf' H. apply clos_rt_rtn1_iff in H. 
-  remember (state m f Hwf) as s eqn:Heqs.
-  remember (state m' f' Hwf') as s' eqn:Heqs'.
-  generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
-  induction H.
-  - intros. congruence.
-  - intros. destruct y, z; try congruence.
-    + inversion H.
-    + subst. injection Heqs' as <- <-. apply trans_same_formula in H as <-.
-      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m) (Hwf':=Hwf0) (Hwf:=Hwf).
-      * reflexivity.
-      * reflexivity.
-Qed.
-
 Lemma initial_wf: forall (f: CNF), WellFormed [] f.
 Proof.
   unfold WellFormed, NoDuplicates, Bounded. split.
@@ -1551,31 +1494,130 @@ Proof.
   - now intros.
 Qed.
 
-Lemma initial_refl: forall (f: CNF), state [] f (initial_wf f) ==>* state [] f (initial_wf f).
+Lemma trans__wf: forall (s: State) (m: PA) (f: CNF),
+  s ==> state m f -> WellFormed m f.
+Proof. Admitted.
+
+Lemma trans_clos__wf: forall (m: PA) (f: CNF),
+  state [] f ==>* state m f -> WellFormed m f.
+Proof.
+  intros m f Htrans. apply clos_rt_rtn1_iff in Htrans. 
+  remember (state [] f) as s eqn:Heqs.
+  remember (state m f) as s' eqn:Heqs'.
+  generalize dependent m. generalize dependent f.
+  induction Htrans.
+  - intros. subst s. injection Heqs' as <-. apply initial_wf.
+  - intros. destruct y, z; try congruence.
+    + inversion H.
+    + injection Heqs' as -> ->. now apply trans__wf in H.
+Qed.
+
+Lemma trans__state_lt: forall (m: PA) (f: CNF) (s': State),
+  state m f ==> s' -> state m f >>[f] s'.
+Proof.
+  intros m f s' Htrans. inversion Htrans as 
+    [
+      m' f' c_conflict Hwf Hc_in_f Hconflict Hno_dec |
+      m' f' c_unit l_unit Hwf Hl_in_c Hc_in_f Hconflict Hundef |
+      m' f' c_decide l_decide Hwf Hx_in_c Hc_in_f Hundef |
+      m_split n_split f' c_conflict l_split Hwf Hc_in_f Hconflict Hno_dec
+    ]; subst s'; try subst m'; try subst f'.
+  (* t_fail *)
+  - unfold StateLt. now left.
+  (* t_unit *)
+  - unfold StateLt. right. unfold MR. simp state_measure. apply left_slex.
+    apply prefix_prop. now apply trans__wf in Htrans.
+  (* t_decide *)
+  - unfold StateLt. right. unfold MR. simp state_measure. rewrite score_dec.
+    + apply right_slex. apply total_decide. now apply trans__wf in Htrans.
+    + now apply trans__wf in Htrans.
+  (* t_backtrack *)
+  - unfold StateLt. right. unfold MR. simp state_measure. apply left_slex.
+    apply prefix_app.
+    + now apply trans__wf in Htrans.
+    + assumption.
+Qed.
+
+Lemma next_state__state_lt: forall (m: PA) (f: CNF) (Hwf: WellFormed m f) (s': State), 
+  next_state (state m f) = Some s' -> state m f >>[f] s'.
+Proof. intros. apply trans__state_lt. now apply next_state_sound. Qed.
+
+Lemma next_state_options: forall (m: PA) (f: CNF),
+  next_state (state m f) = None \/
+  next_state (state m f) = Some fail \/ 
+  exists (m': PA), next_state (state m f) = Some (state m' f).
+Proof.
+  intros. funelim (next_state (state m f)).
+  - left. reflexivity.
+  - injection eqargs as <- <-. rewrite Heqcall. destruct (find_conflict m f).
+    + destruct (split_last_decision m) as [(m_split, l_split)|] eqn:Hsplit.
+      -- right. right. now exists (m_split ++p ¬l_split).
+      -- right. now left.
+    + destruct (find_unit m f) as [(c_unit, l_unit)|] eqn:Hfind_unit.
+      * right. right. now exists (m ++p l_unit).
+      * destruct (find_decision m f) as [l_dec|] eqn:Hfind_dec.
+        -- right. right. now exists (m ++d l_dec).
+        -- now left.
+Qed.
+
+Lemma trans_same_formula: forall (m m': PA) (f f': CNF), state m f ==> state m' f' -> f = f'.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Lemma trans_clos_same_formula: forall (m m': PA) (f f': CNF), state m f ==>* state m' f' -> f = f'.
+Proof. 
+  intros m m' f f' H. apply clos_rt_rtn1_iff in H.
+  remember (state m f) as s eqn:Heqs.
+  remember (state m' f') as s' eqn:Heqs'.
+  generalize dependent m. generalize dependent m'.
+  induction H.
+  - intros. congruence.
+  - intros. destruct y, z; try congruence.
+    + inversion H.
+    + subst. injection Heqs' as <- <-. apply trans_same_formula in H as <-.
+      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m).
+      * reflexivity.
+      * reflexivity.
+Qed.
+
+Lemma initial_refl: forall (f: CNF), state [] f ==>* state [] f.
 Proof. intros. apply rt_refl. Qed.
+
+Lemma trans_extend: forall (s s': State) (f: CNF),
+  state [] f ==>* s ->
+  next_state s = Some s' ->
+  state [] f ==>* s'.
+Proof.
+  intros s s' f Htrans Hnext. destruct s as [|m' f'].
+  - discriminate.
+  - pose proof (trans_clos_same_formula _ _ _ _ Htrans) as <-. 
+    apply next_state_sound in Hnext.
+    + apply (rt_trans _ _ _ _ _ Htrans). now apply rt_step.
+    + now apply trans_clos__wf.
+Qed.
 
 Section solve.
   Context (f: CNF). 
   
   Instance wf_state_lt_f: WellFounded (StateLt f) := wf_state_lt f.
 
-  Equations solve_aux (s: State) (H: state [] f (initial_wf f) ==>* s): State by wf s (StateLt f) :=
+  Equations solve_aux (s: State) (H: state [] f ==>* s): State by wf s (StateLt f) :=
   solve_aux s H with inspect (next_state s) :=
-    | Some s' eqn:ns := solve_aux s' ((rt_trans _ _ _ s s' H (rt_step _ _ s s' (next_state_sound s s' ns))))
+    | Some s' eqn:ns := solve_aux s' (trans_extend s s' f H ns)
     | None    eqn:ns := s.
   Next Obligation.
     destruct s.
     - inversion ns.
-    - destruct (next_state_options m f0 Hwf) as [G|[G|G]].
+    - destruct (next_state_options m f0) as [G|[G|G]].
       + congruence.
       + rewrite ns in G. injection G as ->. now constructor.
-      + rewrite ns in G. destruct G. destruct H0. injection H0 as ->.
-        apply next_state_sound in ns. assert (state [] f (initial_wf f) ==>* state x f0 x0).
-        * apply (rt_trans _ _ _ (state m f0 Hwf) _ H). now apply rt_step.
+      + rewrite ns in G. destruct G. injection H0 as ->.
+        apply next_state_sound in ns. assert (state [] f ==>* state x f0).
+        * apply (rt_trans _ _ _ (state m f0) _ H). now apply rt_step.
         * apply trans_clos_same_formula in H0. subst f0. now apply trans__state_lt.
+        * pose proof (trans_clos_same_formula _ _ _ _ H) as <-. now apply trans_clos__wf.
   Qed.
 
-  Definition solve: State := solve_aux (state [] f (initial_wf f)) (initial_refl f).
+  Definition solve: State := solve_aux (state [] f) (initial_refl f).
 End solve.
 
 Module Satisfiability.
@@ -1592,23 +1634,23 @@ Module Satisfiability.
   Proof. unfold Final. unfold not. intros. inversion H. inversion H0. Qed.
 
   Theorem final_exists: forall (f: CNF),
-    exists (s: State), state [] f (initial_wf f) ==>* s /\ Final s.
+    exists (s: State), state [] f ==>* s /\ Final s.
   Admitted.
 
-  Theorem final_sat_refl: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
-    state [] f (initial_wf f) ==>* state m f Hwf /\ Final (state m f Hwf) <-> Sat f.
+  Theorem final_sat_refl: forall (m: PA) (f: CNF),
+    state [] f ==>* state m f /\ Final (state m f) -> Sat f.
   Admitted.
 
   Theorem final_unsat_refl: forall (f: CNF),
-    state [] f (initial_wf f) ==>* fail /\ Final fail <-> Unsat f.
+    state [] f ==>* fail /\ Final fail <-> Unsat f.
   Admitted.
 
   Theorem sat_decidable: forall (f: CNF), Sat f \/ Unsat f.
   Proof.
-    intros. destruct (final_exists f) as [[|m f' Hwf] ].
+    intros. destruct (final_exists f) as [[|m f'] ].
     - right. now apply final_unsat_refl.
     - left. destruct H. assert (f = f').
-      + now apply (trans_clos_same_formula [] m f f' (initial_wf f) Hwf).
-      + subst f'. now apply (final_sat_refl m f Hwf).
+      + now apply (trans_clos_same_formula [] m f f').
+      + subst f'. now apply (final_sat_refl m f).
   Qed.
 End Satisfiability.
