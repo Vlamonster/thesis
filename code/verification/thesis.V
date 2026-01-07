@@ -2,6 +2,9 @@ From Equations Require Import Equations.
 From Stdlib Require Import Nat Bool Arith List Relations Wellfounded Lia.
 Import ListNotations.
 
+(* Do not assume functional extionsality with Equations. *)
+Unset Equations With Funext.
+
 Open Scope bool_scope.
 
 Ltac slia := simpl in *; lia.
@@ -1563,8 +1566,8 @@ Section solve.
   solve_aux s H with inspect (next_state s) :=
     | Some s' eqn:ns := solve_aux s' ((rt_trans _ _ _ s s' H (rt_step _ _ s s' (next_state_sound s s' ns))))
     | None    eqn:ns := s.
-  Next Obligation.
-    destruct s.
+  Next Obligation. 
+    clear solve_aux. destruct s.
     - inversion ns.
     - destruct (next_state_options m f0 Hwf) as [G|[G|G]].
       + congruence.
