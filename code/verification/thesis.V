@@ -1536,13 +1536,13 @@ Proof.
   intros m m' f f' Hwf Hwf' H. apply clos_rt_rtn1_iff in H. 
   remember (state m f Hwf) as s eqn:Heqs.
   remember (state m' f' Hwf') as s' eqn:Heqs'.
-  generalize dependent m. generalize dependent m'. generalize dependent f. generalize dependent f'.
+  generalize dependent m. generalize dependent m'.
   induction H.
   - intros. congruence.
   - intros. destruct y, z; try congruence.
     + inversion H.
     + subst. injection Heqs' as <- <-. apply trans_same_formula in H as <-.
-      apply IHclos_refl_trans_n1 with (m':=m0) (m:=m) (Hwf':=Hwf0) (Hwf:=Hwf).
+      apply IHclos_refl_trans_n1 with (Hwf':=Hwf0) (Hwf:=Hwf).
       * reflexivity.
       * reflexivity.
 Qed.
@@ -1557,6 +1557,16 @@ Qed.
 Lemma initial_refl: forall (f: CNF), state [] f (initial_wf f) ==>* state [] f (initial_wf f).
 Proof. intros. apply rt_refl. Qed.
 
+Lemma next_state_trans: forall (f: CNF) (s s': State),
+  next_state s = Some s' ->
+  state [] f (initial_wf f) ==>* s ->
+  state [] f (initial_wf f) ==>* s'.
+Proof.
+  intros f s s' ns H. eapply rt_trans.
+  - apply H.
+  - apply rt_step. now apply next_state_sound.
+Qed.
+
 Section solve.
   Context (f: CNF). 
   
@@ -1564,7 +1574,7 @@ Section solve.
 
   Equations solve_aux (s: State) (H: state [] f (initial_wf f) ==>* s): State by wf s (StateLt f) :=
   solve_aux s H with inspect (next_state s) :=
-    | Some s' eqn:ns := solve_aux s' ((rt_trans _ _ _ s s' H (rt_step _ _ s s' (next_state_sound s s' ns))))
+    | Some s' eqn:ns := solve_aux s' (next_state_trans f s s' ns H)
     | None    eqn:ns := s.
   Next Obligation. 
     clear solve_aux. destruct s.
