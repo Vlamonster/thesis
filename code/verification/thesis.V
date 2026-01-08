@@ -1650,15 +1650,45 @@ Module Satisfiability.
       + reflexivity.
   Qed.
 
+  Lemma false_conflict_exists: forall (m: PA) (f: CNF),
+    f_eval m f = Some false -> exists (c: Clause), find_conflict m f = Some c.
+  Proof.
+    intros. simp find_conflict. funelim (f_eval m f).
+    - discriminate.
+    - simpl. simp is_conflict. rewrite Heq. simpl. apply Hind.
+      + congruence.
+      + reflexivity.
+      + reflexivity.
+    - exists c. simpl. simp is_conflict. now rewrite Heq.
+    - congruence.
+    - simpl. simp is_conflict. rewrite Heq0. simpl. apply Hind.
+      + assumption.
+      + reflexivity.
+      + reflexivity.
+    - congruence.
+  Qed.
+
   Lemma final_model: forall (m: PA) (f: CNF) (Hwf: WellFormed m f),
     Final (state m f Hwf) -> Model m f.
   Proof.
     unfold Model. unfold Final. unfold not. intros. destruct (f_eval m f) eqn:Heq.
     - destruct b.
       + reflexivity.
-      (* There is a contradiction, either t_fail or t_backtrack. *)
-      + exfalso. apply H. admit.
-    (* There is an undefined variable, t_decide applies. *)
+      + exfalso. apply H. apply false_conflict_exists in Heq as [c_conflict Hfind_conflict].
+        destruct (split_last_decision m) as [[m_split l_split]|] eqn:Hsplit.
+        (* t_backtrack *)
+        * exists (state (m_split ++p ¬l_split) f (wf_backtrack m m_split f l_split Hsplit Hwf)).
+          pose proof (split_decomp m m_split l_split Hsplit) as [n_split [-> Hno_dec]].
+          apply (t_backtrack m_split n_split f c_conflict l_split Hwf).
+          -- now apply find_conflict_c_in_f in Hfind_conflict.
+          -- now apply find_conflict_conflicting in Hfind_conflict.
+          -- assumption.
+        (* t_fail *)
+        * exists fail. apply (t_fail m f c_conflict).
+          -- now apply find_conflict_c_in_f in Hfind_conflict.
+          -- now apply find_conflict_conflicting in Hfind_conflict.
+          -- now apply no_split__no_decision.
+    (* t_decide *)
     - exfalso. apply H. apply undef_decision_exists in Heq as [l_decide Hfind_dec].
       exists (state (m ++d l_decide) f (wf_decide _ _ _ Hfind_dec Hwf)).
       pose proof (find_decision_decomp m f l_decide Hfind_dec) as [c_decide [Hfind_undef_l Hc_in_f]].
@@ -1666,7 +1696,7 @@ Module Satisfiability.
       + left. now apply find_undef_l_in_c in Hfind_undef_l.
       + assumption.
       + now apply find_undef_l_undef in Hfind_undef_l.
-  Admitted.
+  Qed.
 
   Theorem final_sat_refl: forall (f: CNF),
     (exists (m: PA) (Hwf: WellFormed m f),
